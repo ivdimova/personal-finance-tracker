@@ -284,8 +284,42 @@ def extract_receipt_info(file_path, filename):
         merchant_from_text = detect_merchant_from_text(extracted_text)
         current_app.logger.info(f"Merchants: filename='{merchant_from_filename}', OCR='{merchant_from_text}'")
         
-        # Prefer OCR-detected merchant if found, otherwise use filename
-        merchant = merchant_from_text if merchant_from_text != 'Unknown' else merchant_from_filename
+        # Smart merchant selection - consider quality of OCR result
+        def is_poor_ocr_result(ocr_merchant):
+            """Check if OCR result is likely a poor reading of a logo/image"""
+            if ocr_merchant == 'Unknown' or len(ocr_merchant) <= 1:
+                return True
+            
+            # Only reject very obvious poor OCR readings
+            poor_ocr_patterns = [
+                'issue', 'issuer', 'dear', 'minutes', 'subject',
+                'waterside', 'registered', 'office'
+            ]
+            
+            ocr_lower = ocr_merchant.lower().strip()
+            # Only reject if it's an exact match to avoid false positives
+            if ocr_lower in poor_ocr_patterns:
+                current_app.logger.info(f"OCR result '{ocr_merchant}' appears to be poor quality (exact match to poor OCR pattern)")
+                return True
+                
+            # Only reject very short results (2 chars or less)
+            if len(ocr_merchant) <= 2:
+                return True
+                
+            return False
+        
+        # Prefer filename if OCR result is poor, otherwise use OCR
+        if merchant_from_text != 'Unknown' and not is_poor_ocr_result(merchant_from_text):
+            merchant = merchant_from_text
+        else:
+            # Use filename, but if that's also poor, try to extract from OCR text using known merchants
+            if merchant_from_filename == 'Unknown' or len(merchant_from_filename) < 3:
+                # Try to find known merchants in the OCR text even if the parsing failed
+                merchant = find_known_merchant_in_text(extracted_text)
+                if merchant == 'Unknown':
+                    merchant = merchant_from_filename
+            else:
+                merchant = merchant_from_filename
         
         # Try to detect date from OCR text first, then filename
         receipt_date = detect_date_from_text(extracted_text)
@@ -316,6 +350,45 @@ def extract_receipt_info(file_path, filename):
             'success': False,
             'error': str(e)
         }
+
+def find_known_merchant_in_text(text):
+    """Find known merchant names in OCR text - fallback for when main parsing fails"""
+    if not text:
+        return 'Unknown'
+        
+    text_lower = text.lower()
+    
+    # Common merchant patterns (same as in detect_merchant_from_text but just the lookup)
+    merchants = {
+        'uber': ['uber', 'uber eats', 'ubereats'],
+        'starbucks': ['starbucks', 'sbux', 'star bucks'],
+        'mcdonalds': ['mcdonalds', "mcdonald's", 'mcd', 'mc donald'],
+        'amazon': ['amazon', 'amzn'],
+        'walmart': ['walmart', 'wal-mart', 'wal mart'],
+        'target': ['target'],
+        'apple': ['apple', 'apple.com', 'apple inc', 'app store'],
+        'google': ['google', 'google pay', 'google store'],
+        'microsoft': ['microsoft', 'msft'],
+        'netflix': ['netflix'],
+        'spotify': ['spotify'],
+        'airbnb': ['airbnb'],
+        'booking': ['booking.com', 'booking'],
+        'british airways': ['british airways', 'ba ', 'british air'],
+        'american airlines': ['american airlines', 'aa ', 'american air'],
+        'delta': ['delta', 'delta air'],
+        'marriott': ['marriott'],
+        'hilton': ['hilton'],
+        'hyatt': ['hyatt']
+    }
+    
+    # Check for exact merchant matches
+    for merchant, keywords in merchants.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                current_app.logger.info(f"Found known merchant '{merchant}' via keyword '{keyword}' in fallback search")
+                return merchant.title()
+    
+    return 'Unknown'
 
 def detect_merchant_from_text(text):
     """Detect merchant name from OCR text with enhanced parsing for stylized fonts"""
@@ -386,44 +459,75 @@ def detect_merchant_from_text(text):
     cleaned_text = re.sub(r'[—_=\-]{2,}', ' ', text)  # Remove long dashes/underscores
     cleaned_text = re.sub(r'[^\w\s\.\,\&\']', ' ', cleaned_text)  # Keep only letters, spaces, common punctuation
     
-    lines = cleaned_text.split('\n')[:10]  # Check first 10 lines
+    lines = cleaned_text.split('\n')[:8]  # Check first 8 lines (merchants usually at top)
     
-    for line in lines:
+    for i, line in enumerate(lines):
         line = line.strip()
-        if 5 <= len(line) <= 35:  # Reasonable merchant name length
-            # Skip common receipt words
-            skip_words = {'receipt', 'invoice', 'bill', 'total', 'date', 'time', 'phone', 'address', 
-                         'server', 'ticket', 'table', 'inside', 'order', 'thank you', 'thanks',
-                         'visit', 'customer', 'store', 'location'}
+        if 3 <= len(line) <= 30:  # Reasonable merchant name length
+            line_lower = line.lower()
             
-            # Skip lines that are mostly numbers or timestamps
-            if re.match(r'^[\d\s/:,\-\.]+$', line):
+            # Skip words - only the most obvious non-merchant terms
+            skip_words = {
+                'receipt', 'invoice', 'total', 'date', 'time', 'thank you', 'thanks',
+                'visit', 'issuer', 'subject', 'dear', 'miss', 'minutes',
+                'registered', 'office', 'waterside',
+                'september', 'october', 'november', 'december', 'january', 'february',
+                'march', 'april', 'may', 'june', 'july', 'august'
+            }
+            
+            # Skip lines that are mostly numbers, timestamps, or emails
+            if (re.match(r'^[\d\s/:,\-\.\@]+$', line) or 
+                '@' in line or 
+                any(skip_word in line_lower for skip_word in skip_words)):
                 continue
+            
+            # Prioritize lines near the top (index 0-2 get bonus consideration)
+            position_bonus = i <= 2
+            
+            # Look for lines with mostly letters (potential business names)
+            letter_ratio = sum(c.isalpha() for c in line) / len(line) if line else 0
+            min_letter_ratio = 0.5 if position_bonus else 0.7  # More lenient for top lines
+            
+            if letter_ratio > min_letter_ratio:
+                # Clean up the line
+                clean_name = re.sub(r'[^\w\s&\'-]', '', line).strip()
                 
-            if not any(word in line.lower() for word in skip_words):
-                # Look for lines with mostly letters (potential business names)
-                letter_ratio = sum(c.isalpha() for c in line) / len(line) if line else 0
-                if letter_ratio > 0.6:  # At least 60% letters
-                    # Clean up the line
-                    clean_name = re.sub(r'[^\w\s&\'-]', '', line).strip()
-                    if len(clean_name) > 3:
-                        current_app.logger.info(f"Found potential merchant '{clean_name}' from text parsing")
-                        return clean_name.title()
+                # Additional validation - must have at least one word > 1 char
+                words = clean_name.split()
+                valid_words = [w for w in words if len(w) > 1 and w.lower() not in skip_words]
+                
+                if len(valid_words) >= 1 and len(clean_name) >= 2:
+                    # Be more accepting overall
+                    current_app.logger.info(f"Found potential merchant '{clean_name}' from text parsing (position {i})")
+                    return clean_name.title()
     
     # Last resort: look for any capitalized words that might be merchant names
-    words = re.findall(r'\b[A-Z][a-zA-Z]{2,}\b', text)
+    words = re.findall(r'\b[A-Z][a-zA-Z]{3,}\b', text)  # At least 4 chars
     if words:
-        # Filter out common non-merchant words
+        # Filter out common non-merchant words (expanded list)
         business_words = []
-        skip_caps = {'RECEIPT', 'INVOICE', 'TOTAL', 'DATE', 'TIME', 'SERVER', 'TABLE', 'TICKET',
-                    'INSIDE', 'OUTSIDE', 'CARD', 'CASH', 'CHANGE', 'SUBTOTAL', 'TAX', 'TIP'}
+        skip_caps = {
+            'RECEIPT', 'INVOICE', 'TOTAL', 'DATE', 'TIME', 'SERVER', 'TABLE', 'TICKET',
+            'INSIDE', 'OUTSIDE', 'CARD', 'CASH', 'CHANGE', 'SUBTOTAL', 'TAX', 'TIP',
+            'DEAR', 'MISS', 'MISTER', 'HELLO', 'SUBJECT', 'REFERENCE', 'BOOKING',
+            'CONFIRMATION', 'REGISTERED', 'OFFICE', 'ENGLAND', 'WATERSIDE', 'MINUTES',
+            'HOURS', 'PAYMENT', 'BALANCE', 'AMOUNT', 'CUSTOMER', 'THANK', 'VISIT',
+            'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'JUNE', 'JULY', 'AUGUST',
+            'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER', 'MONDAY', 'TUESDAY',
+            'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'
+        }
         
-        for word in words[:5]:  # Check first few capitalized words
-            if word.upper() not in skip_caps and len(word) > 3:
+        # Only take words from the first few lines of text
+        text_lines = text.split('\n')[:5]
+        first_part_text = '\n'.join(text_lines)
+        first_words = re.findall(r'\b[A-Z][a-zA-Z]{3,}\b', first_part_text)
+        
+        for word in first_words[:3]:  # Check first few capitalized words from top
+            if word.upper() not in skip_caps and len(word) > 2:
                 business_words.append(word)
         
         if business_words:
-            potential_name = ' '.join(business_words[:2])  # Take first 1-2 words
+            potential_name = business_words[0]  # Just take the first good word
             current_app.logger.info(f"Found potential merchant '{potential_name}' from capitalized words")
             return potential_name.title()
     
@@ -607,7 +711,7 @@ def detect_merchant_from_filename(filename):
     """Detect merchant name from filename using common patterns"""
     filename_lower = filename.lower()
     
-    # Common merchant patterns
+    # Common merchant patterns (expanded)
     merchants = {
         'uber': ['uber', 'ubereat', 'ubr'],
         'starbucks': ['starbucks', 'sbux'],
@@ -615,6 +719,15 @@ def detect_merchant_from_filename(filename):
         'amazon': ['amazon', 'amzn'],
         'netflix': ['netflix'],
         'spotify': ['spotify'],
+        'apple': ['apple', 'app'],
+        'google': ['google'],
+        'microsoft': ['microsoft', 'msft'],
+        'british airways': ['british', 'airways', 'ba'],
+        'american airlines': ['american', 'airlines', 'aa'],
+        'marriott': ['marriott'],
+        'hilton': ['hilton'],
+        'booking': ['booking'],
+        'airbnb': ['airbnb'],
         'grocery': ['grocery', 'market', 'supermarket'],
         'restaurant': ['restaurant', 'rest', 'cafe', 'coffee'],
         'gas': ['gas', 'fuel', 'petrol', 'shell', 'bp'],
@@ -630,14 +743,30 @@ def detect_merchant_from_filename(filename):
     
     # Try to extract from common receipt naming patterns
     # Look for patterns like "receipt_merchant_date" or "merchant_invoice"
-    parts = re.split(r'[-_\s]+', filename_lower.replace('.pdf', '').replace('.jpg', '').replace('.png', ''))
+    # Clean filename first
+    clean_name = filename_lower
+    for ext in ['.pdf', '.jpg', '.jpeg', '.png', '.webp']:
+        clean_name = clean_name.replace(ext, '')
     
-    # Skip common words
-    skip_words = {'receipt', 'invoice', 'bill', 'scan', 'img', 'photo', 'screenshot', 'document'}
-    potential_merchants = [part for part in parts if part not in skip_words and len(part) > 2]
+    parts = re.split(r'[-_\s]+', clean_name)
+    
+    # Skip common words and patterns
+    skip_words = {'receipt', 'invoice', 'bill', 'scan', 'img', 'photo', 'screenshot', 
+                 'document', 'file', 'image', 'pic', 'picture', 'snap', 'shot'}
+    
+    potential_merchants = []
+    for part in parts:
+        if (len(part) >= 3 and 
+            part not in skip_words and 
+            not part.isdigit() and  # Skip pure numbers
+            not re.match(r'^[0-9a-f]{8}', part)):  # Skip UUID-like patterns
+            potential_merchants.append(part)
     
     if potential_merchants:
-        return potential_merchants[0].title()
+        # Return the first meaningful part
+        best_merchant = potential_merchants[0].title()
+        current_app.logger.info(f"Extracted merchant '{best_merchant}' from filename parts: {potential_merchants}")
+        return best_merchant
     
     return 'Unknown'
 

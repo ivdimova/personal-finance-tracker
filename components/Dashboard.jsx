@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Upload, TrendingUp, TrendingDown, DollarSign, FileText, AlertCircle } from 'lucide-react'
 import { analyticsApi, transactionsApi } from '../services/api'
 import FileUpload from './FileUpload'
 
 const Dashboard = () => {
+  const navigate = useNavigate()
   const [summary, setSummary] = useState(null)
   const [recentTransactions, setRecentTransactions] = useState([])
   const [loading, setLoading] = useState(true)
@@ -82,10 +84,13 @@ const Dashboard = () => {
           <span className="text-lg font-semibold">Upload CSV File</span>
         </button>
         
-        <div className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl">
+        <button
+          onClick={() => navigate('/transactions')}
+          className="flex items-center justify-center p-6 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl hover:from-blue-600 hover:to-cyan-700 transition-all duration-200 shadow-lg"
+        >
           <FileText className="mr-3" size={24} />
           <span className="text-lg font-semibold">View All Transactions</span>
-        </div>
+        </button>
       </div>
 
       {/* Financial Summary */}

@@ -322,12 +322,104 @@ def clean_amount_string(amount_str):
     except ValueError:
         return 0.0
 
+def parse_space_delimited_banking_file(file_path, sample_lines):
+    """Parse space-delimited banking format files like Portuguese banks"""
+    transactions = []
+    current_app.logger.info("DEBUG: Parsing space-delimited banking format")
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f.readlines() if line.strip()]
+        
+        for line_num, line in enumerate(lines, 1):
+            try:
+                current_app.logger.info(f"DEBUG: Processing line {line_num}: {line}")
+                
+                # Split by multiple spaces to separate columns
+                # Format: DESCRIPTION    DATE    AMOUNT    BALANCE
+                parts = re.split(r'\s{2,}', line.strip())  # Split on 2+ consecutive spaces
+                
+                if len(parts) < 3:
+                    current_app.logger.warning(f"DEBUG: Skipping line {line_num} - insufficient columns: {parts}")
+                    continue
+                
+                description = parts[0].strip()
+                date_str = parts[1].strip()
+                amount_str = parts[2].strip()
+                # parts[3] would be balance if present
+                
+                current_app.logger.info(f"DEBUG: Parsed - desc: '{description}', date: '{date_str}', amount: '{amount_str}'")
+                
+                # Parse date (DD/MM/YYYY format)
+                try:
+                    if '/' in date_str:
+                        date_parts = date_str.split('/')
+                        if len(date_parts) == 3:
+                            day, month, year = date_parts
+                            # Handle 2-digit year
+                            if len(year) == 2:
+                                year = '20' + year if int(year) < 50 else '19' + year
+                            date_obj = datetime(int(year), int(month), int(day)).date()
+                            current_app.logger.info(f"DEBUG: Parsed date: {date_obj}")
+                        else:
+                            current_app.logger.error(f"DEBUG: Invalid date format: {date_str}")
+                            continue
+                    else:
+                        current_app.logger.error(f"DEBUG: Date format not recognized: {date_str}")
+                        continue
+                except (ValueError, IndexError) as e:
+                    current_app.logger.error(f"DEBUG: Date parsing error for '{date_str}': {e}")
+                    continue
+                
+                # Parse amount (handle EUR suffix and comma decimal)
+                amount = clean_amount_string(amount_str)
+                current_app.logger.info(f"DEBUG: Parsed amount: {amount}")
+                
+                if amount == 0.0:
+                    current_app.logger.warning(f"DEBUG: Skipping line {line_num} - zero amount")
+                    continue
+                
+                # Auto-categorize
+                category = categorize_transaction(description, amount)
+                current_app.logger.info(f"DEBUG: Assigned category: {category}")
+                
+                transactions.append({
+                    'date': date_obj,
+                    'description': description,
+                    'amount': amount,
+                    'category': category
+                })
+                
+                current_app.logger.info(f"DEBUG: Successfully processed transaction {len(transactions)}")
+                
+            except Exception as e:
+                current_app.logger.error(f"DEBUG: Error processing line {line_num}: {e}")
+                continue
+        
+        current_app.logger.info(f"DEBUG: Space-delimited parsing completed - {len(transactions)} transactions")
+        return transactions
+        
+    except Exception as e:
+        current_app.logger.error(f"DEBUG: Error in space-delimited parsing: {e}")
+        raise ValueError(f"Error parsing space-delimited banking file: {str(e)}")
+
 def parse_csv_file(file_path):
     """Parse CSV file and extract transactions"""
     transactions = []
     
     try:
-        # Try different encodings and delimiters
+        # First check if this is a space-delimited format (like Portuguese banking)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            sample_lines = [line.strip() for line in f.readlines()[:3] if line.strip()]
+        
+        # Check for space-delimited format with EUR currency (only if no tabs or commas)
+        if (sample_lines and 
+            all('EUR' in line and len(line.split()) >= 4 for line in sample_lines) and
+            not any('\t' in line or ',' in line for line in sample_lines)):
+            current_app.logger.info("DEBUG: Detected space-delimited banking format")
+            return parse_space_delimited_banking_file(file_path, sample_lines)
+        
+        # Try different encodings and delimiters for standard CSV
         df = None
         delimiters = [',', ';', '\t', '|']
         best_result = None
@@ -518,10 +610,17 @@ def parse_csv_file(file_path):
             df_columns_lower = [col.lower().strip() for col in df.columns]
             current_app.logger.info(f"DEBUG: Looking for headers in columns: {df_columns_lower}")
             
-            # Detect Revolut format specifically
+            # Detect specific bank formats
             has_revolut_columns = any(col in df_columns_lower for col in ['completed date', 'started date']) and \
                                  'description' in df_columns_lower and \
                                  'amount' in df_columns_lower
+            
+            # Check for CaixaBank format: item, date, amount, balance
+            has_caixabank_columns = (len(df_columns_lower) == 4 and 
+                                   'item' in df_columns_lower and 
+                                   'date' in df_columns_lower and
+                                   'amount' in df_columns_lower and 
+                                   'balance' in df_columns_lower)
             
             if has_revolut_columns:
                 current_app.logger.info("DEBUG: Detected Revolut CSV format!")
@@ -529,6 +628,15 @@ def parse_csv_file(file_path):
                 actual_columns = {
                     'date': 'Completed Date',
                     'description': 'Description', 
+                    'amount': 'Amount'
+                }
+                found_columns = True
+            elif has_caixabank_columns:
+                current_app.logger.info("DEBUG: Detected CaixaBank CSV format!")
+                # CaixaBank format: Item (description), Date, Amount, Balance
+                actual_columns = {
+                    'description': 'Item',
+                    'date': 'Date',
                     'amount': 'Amount'
                 }
                 found_columns = True
