@@ -7,9 +7,11 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.models.user import db
 from src.models.transaction import Transaction, Category
+from src.models.communal_expense import CommunalExpenseType, CommunalExpense
 from src.routes.user import user_bp
 from src.routes.finance import finance_bp
 from src.routes.receipts import receipts_bp
+from src.routes.settings import settings_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -20,6 +22,7 @@ CORS(app)
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(finance_bp, url_prefix='/api')
 app.register_blueprint(receipts_bp, url_prefix='/api/receipts')
+app.register_blueprint(settings_bp, url_prefix='/api/settings')
 
 # uncomment if you need to use database
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"

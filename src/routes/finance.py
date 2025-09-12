@@ -7,6 +7,7 @@ from datetime import datetime
 import json
 import re
 from src.models.transaction import Transaction, Category
+from src.models.communal_expense import CommunalExpenseType
 from src.models.user import db
 
 finance_bp = Blueprint('finance', __name__)
@@ -121,7 +122,6 @@ def initialize_categories():
 def categorize_transaction(description, amount=0.0):
     """Auto-categorize transaction based on description and amount"""
     description_lower = description.lower()
-    categories = Category.query.all()
     
     # Check if it's a transfer first, then decide based on amount
     transfer_keywords = ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up', 
@@ -136,7 +136,17 @@ def categorize_transaction(description, amount=0.0):
         else:
             return 'Transfers'
     
-    # Regular categorization for non-transfers
+    # Check user-defined communal expenses first (higher priority)
+    communal_expense_types = CommunalExpenseType.query.filter_by(is_active=True).all()
+    for expense_type in communal_expense_types:
+        if expense_type.keywords:
+            keywords = json.loads(expense_type.keywords)
+            for keyword in keywords:
+                if keyword.lower() in description_lower:
+                    return f'Communal - {expense_type.name}'
+    
+    # Regular categorization for non-transfers and non-communal expenses
+    categories = Category.query.all()
     for category in categories:
         if category.keywords and category.name not in ['Income', 'Transfers']:
             keywords = json.loads(category.keywords)
