@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reset Data - Personal Finance Tracker</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #333;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+            margin-bottom: 40px;
+        }
+        
+        .nav-link {
+            display: inline-block;
+            margin-bottom: 30px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .nav-link:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .warning-section {
+            background: #fef5e7;
+            border: 2px solid #f39c12;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .warning-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .warning-text {
+            color: #8b4513;
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        
+        .reset-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        
+        .reset-button {
+            padding: 15px 25px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .reset-button.danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .reset-button.danger:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+        
+        .reset-button.warning {
+            background: #f39c12;
+            color: white;
+        }
+        
+        .reset-button.warning:hover {
+            background: #e67e22;
+            transform: translateY(-2px);
+        }
+        
+        .reset-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status-message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="nav-link">← Back to Main App</a>
+        
+        <div class="header">
+            <h1>🗑️ Reset Data</h1>
+            <p class="subtitle">Manage your application data</p>
+        </div>
+        
+        <div class="warning-section">
+            <div class="warning-icon">⚠️</div>
+            <div class="warning-text">
+                <strong>Warning:</strong> These actions cannot be undone!<br>
+                Make sure you have backed up any important data before proceeding.
+            </div>
+        </div>
+        
+        <div class="reset-buttons">
+            <button class="reset-button warning" onclick="resetTransactions()" id="resetTransactionsBtn">
+                🔄 Reset Transactions Only
+            </button>
+            
+            <button class="reset-button warning" onclick="resetCategories()" id="resetCategoriesBtn">
+                📁 Reset Categories to Default
+            </button>
+            
+            <button class="reset-button danger" onclick="resetAllData()" id="resetAllBtn">
+                💥 Reset Everything (Transactions + Categories)
+            </button>
+        </div>
+        
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+
+    <script>
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.style.display = 'block';
+            
+            // Hide after 5 seconds
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        async function resetTransactions() {
+            if (!confirm('Are you sure you want to delete ALL transactions? This cannot be undone.')) {
+                return;
+            }
+            
+            const button = document.getElementById('resetTransactionsBtn');
+            button.disabled = true;
+            button.textContent = '🔄 Resetting Transactions...';
+            
+            try {
+                const response = await fetch('/api/reset/transactions', {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('✅ All transactions have been reset successfully!', 'success');
+                } else {
+                    showStatus('❌ Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error resetting transactions:', error);
+                showStatus('❌ Error resetting transactions: ' + error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = '🔄 Reset Transactions Only';
+            }
+        }
+
+        async function resetCategories() {
+            if (!confirm('Are you sure you want to reset categories to default? Any custom categories will be lost.')) {
+                return;
+            }
+            
+            const button = document.getElementById('resetCategoriesBtn');
+            button.disabled = true;
+            button.textContent = '📁 Resetting Categories...';
+            
+            try {
+                const response = await fetch('/api/reset/categories', {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('✅ Categories have been reset to defaults successfully!', 'success');
+                } else {
+                    showStatus('❌ Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error resetting categories:', error);
+                showStatus('❌ Error resetting categories: ' + error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = '📁 Reset Categories to Default';
+            }
+        }
+
+        async function resetAllData() {
+            if (!confirm('Are you sure you want to delete ALL data (transactions AND categories)? This cannot be undone.')) {
+                return;
+            }
+            
+            if (!confirm('This will permanently delete EVERYTHING. Are you absolutely sure?')) {
+                return;
+            }
+            
+            const button = document.getElementById('resetAllBtn');
+            button.disabled = true;
+            button.textContent = '💥 Resetting Everything...';
+            
+            try {
+                const response = await fetch('/api/reset/all', {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus('✅ All data has been reset successfully!', 'success');
+                } else {
+                    showStatus('❌ Error: ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error resetting all data:', error);
+                showStatus('❌ Error resetting all data: ' + error.message, 'error');
+            } finally {
+                button.disabled = false;
+                button.textContent = '💥 Reset Everything (Transactions + Categories)';
+            }
+        }
+    </script>
+</body>
+</html>
