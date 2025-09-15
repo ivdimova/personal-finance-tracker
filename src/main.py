@@ -3,6 +3,7 @@ import sys
 # DON'T CHANGE THIS !!!
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from dotenv import load_dotenv
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 from src.models.user import db
@@ -13,11 +14,13 @@ from src.routes.finance import finance_bp
 from src.routes.receipts import receipts_bp
 from src.routes.settings import settings_bp
 
+load_dotenv()
+
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
 
 # Enable CORS for all routes
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": os.environ.get('CORS_ORIGINS')}})
 
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(finance_bp, url_prefix='/api')
@@ -25,7 +28,9 @@ app.register_blueprint(receipts_bp, url_prefix='/api/receipts')
 app.register_blueprint(settings_bp, url_prefix='/api/settings')
 
 # uncomment if you need to use database
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
+db_dir = os.path.join(os.path.dirname(__file__), 'database')
+os.makedirs(db_dir, exist_ok=True)
+app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(db_dir, 'app.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
 with app.app_context():
@@ -54,4 +59,5 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5555, debug=True)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+    app.run(host='0.0.0.0', port=5555, debug=debug_mode)

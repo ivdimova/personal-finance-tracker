@@ -5,7 +5,7 @@ A comprehensive web application for managing personal finances with CSV import, 
 ## 🚀 Features
 
 ### 📊 **Financial Management**
-- **CSV Import**: Support for multiple banking formats (CaixaBank, space-delimited formats)
+- **CSV Import**: Support for multiple banking formats
 - **Transaction Categorization**: Automatic categorization with customizable rules
 - **Expense Analytics**: Spending trends, category summaries, and financial insights
 - **Refund Detection**: Automatic detection and removal of refund transactions
@@ -79,24 +79,12 @@ cd personal-finance-tracker
 
 #### Create and Activate Virtual Environment:
 ```bash
-python -m venv venv
-
-# On macOS/Linux:
-source venv/bin/activate
-
-# On Windows:
-venv\Scripts\activate
+python3 -m venv venv
 ```
 
 #### Install Python Dependencies:
 ```bash
-pip install flask flask-cors flask-sqlalchemy pandas pillow pytesseract pypdf2 uuid werkzeug
-```
-
-#### Initialize Database:
-```bash
-# The database will be automatically created when you start the Flask server
-python src/main.py
+venv/bin/pip install -r requirements.txt
 ```
 
 ### 3. Frontend Setup (React)
@@ -106,31 +94,44 @@ python src/main.py
 npm install
 ```
 
-#### Install Required Packages:
-```bash
-npm install react react-dom react-router-dom axios lucide-react
-npm install -D @vitejs/plugin-react vite tailwindcss postcss autoprefixer
+### 4. Create Environment File
+Create a `.env` file in the project root and add the following, replacing the `SECRET_KEY` with a new securely generated random string.
+```
+SECRET_KEY='your_super_secret_and_random_key'
+FLASK_DEBUG=True
+CORS_ORIGINS='http://localhost:5173'
 ```
 
-### 4. Start the Application
+### 5. Start the Application
 
 #### Terminal 1 - Start Flask Backend:
 ```bash
-source venv/bin/activate
-python src/main.py
+venv/bin/python src/main.py
 ```
-Backend will run on: http://localhost:5555
+Backend will run on: `http://localhost:5555`
 
 #### Terminal 2 - Start React Frontend:
 ```bash
 npm run dev
 ```
-Frontend will run on: http://localhost:3000
+Frontend will run on: `http://localhost:5173` (or the next available port)
 
 ## 📁 Project Structure
 
 ```
 personal-finance-tracker/
+├── frontend/                     # Frontend (React)
+│   ├── components/               # React components
+│   │   ├── Dashboard.jsx
+│   │   ├── Transactions.jsx
+│   │   ├── Receipts.jsx
+│   │   ├── Settings.jsx
+│   │   ├── Layout.jsx
+│   │   └── FileUpload.jsx
+│   ├── services/                 # Frontend services
+│   │   └── api.js                # API communication
+│   ├── App.jsx                   # React app root
+│   └── main.jsx                  # React entry point
 ├── src/                          # Backend (Flask)
 │   ├── models/                   # Database models
 │   │   ├── user.py
@@ -141,29 +142,18 @@ personal-finance-tracker/
 │   │   ├── receipts.py          # Receipt processing & OCR
 │   │   ├── settings.py          # Communal expense settings
 │   │   └── user.py              # User management
-│   ├── database/                # SQLite database
-│   └── main.py                  # Flask application entry point
-├── components/                   # Frontend (React)
-│   ├── Dashboard.jsx            # Main dashboard
-│   ├── Transactions.jsx         # Transaction management
-│   ├── Receipts.jsx             # Receipt upload & management
-│   ├── Settings.jsx             # Settings configuration
-│   ├── Layout.jsx               # App layout wrapper
-│   └── FileUpload.jsx           # File upload component
-├── services/                     # Frontend services
-│   └── api.js                   # API communication
+│   ├── database/                 # SQLite database
+│   └── main.py                   # Flask application entry point
 ├── receipts/                     # Receipt storage (auto-created)
-│   ├── 01/                      # January receipts
-│   ├── 02/                      # February receipts
-│   └── ...                      # Monthly folders
+│   ├── 01/                       # January receipts
+│   ├── 02/                       # February receipts
+│   └── ...                       # Monthly folders
 ├── tests/                        # Test suite
-│   ├── unit/                    # Unit tests
-│   ├── integration/             # Integration tests
-│   └── conftest.py              # Test configuration
-├── App.jsx                      # React app root
-├── main.jsx                     # React entry point
-├── package.json                 # Node.js dependencies
-└── vite.config.js              # Vite configuration
+│   ├── unit/                     # Unit tests
+│   ├── integration/              # Integration tests
+│   └── conftest.py               # Test configuration
+├── package.json                  # Node.js dependencies
+└── vite.config.js                # Vite configuration
 ```
 
 ## 🔧 API Endpoints
@@ -235,16 +225,15 @@ The application includes a comprehensive test suite covering:
 ### **Run Tests**
 ```bash
 # Backend tests
-source venv/bin/activate
-python -m pytest tests/ -v
+venv/bin/python -m pytest tests/ -v
 
 # Run specific test categories
-python -m pytest tests/unit/models/ -v        # Model tests
-python -m pytest tests/unit/routes/ -v        # API tests
-python -m pytest tests/integration/ -v        # Integration tests
+venv/bin/python -m pytest tests/unit/models/ -v        # Model tests
+venv/bin/python -m pytest tests/unit/routes/ -v        # API tests
+venv/bin/python -m pytest tests/integration/ -v        # Integration tests
 
 # Run with coverage
-python -m pytest tests/ --cov=src --cov-report=html
+venv/bin/python -m pytest tests/ --cov=src --cov-report=html
 ```
 
 ### **Test Coverage**
@@ -263,19 +252,21 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 ## 🔧 Configuration
 
-### **Environment Variables** (Optional)
-Create a `.env` file in the root directory:
-```bash
+### **Environment Variables**
+Create a `.env` file in the root directory to configure the application. At a minimum, you must provide a `SECRET_KEY`.
+
+```.env
+SECRET_KEY='your_super_secret_and_random_key'
 FLASK_DEBUG=True
-DATABASE_URL=sqlite:///src/database/app.db
-TESSERACT_CMD=/usr/local/bin/tesseract  # Path to tesseract binary
+CORS_ORIGINS='http://localhost:5173'
+TESSERACT_CMD=/usr/local/bin/tesseract  # Optional: Path to tesseract binary if not in PATH
 ```
 
 ### **Customization**
-- **Categories**: Add/modify transaction categories in the Settings
-- **OCR Languages**: Modify language settings in `src/routes/receipts.py`
-- **File Storage**: Adjust receipt storage paths in receipt processing functions
-- **Banking Formats**: Extend CSV parsing in `src/routes/finance.py`
+- **Categories**: Add/modify transaction categories in the Settings page of the UI.
+- **OCR Languages**: Modify language settings in `src/routes/receipts.py`.
+- **File Storage**: Adjust receipt storage paths in `src/routes/receipts.py`.
+- **Banking Formats**: Extend CSV parsing in `src/routes/finance.py`.
 
 ## 🚀 Production Deployment
 
@@ -340,9 +331,6 @@ lsof -ti:3000 | xargs kill -9
 - Ensure receipt images are clear and well-lit
 - Supported formats work best: PNG, JPG with high contrast
 - The app includes image preprocessing to improve OCR accuracy
-
-### **Support**
-For issues and feature requests, please create an issue in the GitHub repository.
 
 ---
 

@@ -4,15 +4,14 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  root: '.',
+  root: 'frontend',
   server: {
-    port: 3000,
     proxy: {
       '/api': 'http://localhost:5555'
     }
   },
   build: {
-    outDir: 'src/static',
-    emptyOutDir: false,
+    outDir: '../src/static',
+    emptyOutDir: true,
   },
 })
