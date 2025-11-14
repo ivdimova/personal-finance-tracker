@@ -884,12 +884,21 @@ def upload_file():
 def get_transactions():
     """Get all transactions with optional filtering"""
     category = request.args.get('category')
-    
+
     query = Transaction.query
-    
+
     if category:
-        query = query.filter_by(category=category)
-    
+        if category == 'Bills & Utilities':
+            # Include both regular Bills & Utilities and all Communal expenses
+            query = query.filter(
+                db.or_(
+                    Transaction.category == 'Bills & Utilities',
+                    Transaction.category.like('Communal - %')
+                )
+            )
+        else:
+            query = query.filter_by(category=category)
+
     transactions = query.order_by(Transaction.date.desc()).all()
     
     # Calculate summary for filtered transactions
@@ -899,9 +908,13 @@ def get_transactions():
         'expense_total': 0,
         'transaction_count': len(transactions)
     }
-    
+
     for transaction in transactions:
         amount = transaction.amount
+        # Skip transfers from expense calculations (internal movements)
+        if transaction.category == 'Transfers' and amount < 0:
+            continue
+
         summary['total_amount'] += amount
         if amount > 0:
             summary['income_total'] += amount
@@ -1065,34 +1078,42 @@ def get_expense_summary():
     try:
         # Get all transactions with categories
         transactions = Transaction.query.all()
-        
+
         # Group by category and calculate totals
         category_totals = {}
         uncategorized_total = 0
         income_total = 0
-        
+
         for transaction in transactions:
             amount = transaction.amount
             category = transaction.category
-            
+
             # Separate income from expenses
             if amount > 0:
                 income_total += amount
             else:
                 expense_amount = abs(amount)
                 if category and category.strip():
+                    # Skip transfers (internal movements, not actual expenses)
+                    if category == 'Transfers':
+                        continue
+
+                    # Merge communal expenses into Bills & Utilities
+                    if category.startswith('Communal - '):
+                        category = 'Bills & Utilities'
+
                     if category not in category_totals:
                         category_totals[category] = 0
                     category_totals[category] += expense_amount
                 else:
                     uncategorized_total += expense_amount
-        
+
         # Sort categories by total amount (descending)
         sorted_categories = sorted(category_totals.items(), key=lambda x: x[1], reverse=True)
-        
+
         # Calculate total expenses
         total_expenses = sum(category_totals.values()) + uncategorized_total
-        
+
         return jsonify({
             'total_income': round(income_total, 2),
             'total_expenses': round(total_expenses, 2),

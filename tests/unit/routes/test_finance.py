@@ -172,11 +172,11 @@ class TestFinanceRoutes:
         """Test filtering transactions by category."""
         response = client.get('/api/transactions?category=Food & Dining')
         assert response.status_code == 200
-        
+
         data = response.get_json()
         # Should have 2 food transactions
         assert len(data['transactions']) == 2
-        
+
         for transaction in data['transactions']:
             assert transaction['category'] == 'Food & Dining'
 
@@ -320,11 +320,11 @@ class TestFinanceRoutes:
         """Test expenses summary with no data."""
         response = client.get('/api/expenses/summary')
         assert response.status_code == 200
-        
+
         data = response.get_json()
         assert data['total_income'] == 0
         assert data['total_expenses'] == 0
-        assert data['net_income'] == 0
+        assert data['net_amount'] == 0
         assert data['categories'] == []
 
     @pytest.mark.unit
@@ -334,12 +334,82 @@ class TestFinanceRoutes:
         """Test expenses summary with existing data."""
         response = client.get('/api/expenses/summary')
         assert response.status_code == 200
-        
+
         data = response.get_json()
         assert data['total_income'] == 2500.00
-        assert data['total_expenses'] < 0
-        assert data['net_income'] > 0
+        assert data['total_expenses'] > 0  # Expenses are returned as positive values
+        assert data['net_amount'] > 0  # net_amount = income - expenses
         assert len(data['categories']) > 0
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.finance
+    def test_expenses_summary_groups_communal_with_bills(self, client, db_session):
+        """Test that communal expenses are grouped with Bills & Utilities."""
+        # Create communal expense type
+        communal_type = CommunalExpenseType(
+            name='Electricity',
+            keywords=json.dumps(['electric', 'power']),
+            description='Electricity bills',
+            is_active=True
+        )
+        db_session.add(communal_type)
+        db_session.commit()
+
+        # Create transactions
+        regular_bill = Transaction(
+            date=date(2024, 1, 15),
+            description='Netflix Subscription',
+            amount=-15.00,
+            category='Bills & Utilities'
+        )
+        communal_expense = Transaction(
+            date=date(2024, 1, 16),
+            description='Electric Company',
+            amount=-120.00,
+            category='Communal - Electricity'
+        )
+        other_expense = Transaction(
+            date=date(2024, 1, 17),
+            description='Restaurant',
+            amount=-25.00,
+            category='Food & Dining'
+        )
+        transfer = Transaction(
+            date=date(2024, 1, 18),
+            description='To Ivelina Taneva Dimova',
+            amount=-200.00,
+            category='Transfers'
+        )
+
+        db_session.add_all([regular_bill, communal_expense, other_expense, transfer])
+        db_session.commit()
+
+        # Get expense summary
+        response = client.get('/api/expenses/summary')
+        assert response.status_code == 200
+
+        data = response.get_json()
+
+        # Find Bills & Utilities category
+        bills_category = None
+        for cat in data['categories']:
+            if cat['name'] == 'Bills & Utilities':
+                bills_category = cat
+                break
+
+        # Verify Bills & Utilities includes both regular bills and communal expenses
+        assert bills_category is not None
+        assert bills_category['amount'] == 135.00  # 15.00 + 120.00
+
+        # Verify no separate Communal category exists
+        communal_categories = [cat for cat in data['categories'] if cat['name'].startswith('Communal')]
+        assert len(communal_categories) == 0
+
+        # Verify Transfers are excluded from expenses
+        transfers_category = [cat for cat in data['categories'] if cat['name'] == 'Transfers']
+        assert len(transfers_category) == 0
+        assert data['total_expenses'] == 160.00  # 15.00 + 120.00 + 25.00 (no 200.00 transfer)
 
     @pytest.mark.unit
     @pytest.mark.api
