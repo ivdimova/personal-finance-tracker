@@ -90,6 +90,10 @@ export const settingsApi = {
 
   // Reset endpoints
   resetCommunalExpenses: () => api.delete('/settings/reset/communal-expenses'),
+
+  // User Settings
+  getUserSettings: () => api.get('/settings/user'),
+  updateUserSettings: (data) => api.put('/settings/user', data),
 }
 
 // Reset API

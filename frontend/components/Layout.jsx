@@ -28,6 +28,9 @@ const Layout = ({ children }) => {
             <p className="text-center text-purple-100 mt-2">
               Track expenses, manage receipts, and take control of your finances
             </p>
+            <p className="text-center text-yellow-400 text-lg mt-3 font-bold drop-shadow-lg">
+              🤖 Powered by AI with Ollama
+            </p>
           </div>
 
           {/* Navigation */}

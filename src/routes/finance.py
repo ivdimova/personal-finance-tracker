@@ -81,8 +81,8 @@ DEFAULT_CATEGORIES = [
     },
     {
         'name': 'Transfers',
-        'keywords': ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up', 
-                    'revolut bank', 'to ivelina', 'to shady', 'send money', 'receive money', 'p2p'],
+        'keywords': ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up',
+                    'revolut bank', 'send money', 'receive money', 'p2p'],
         'color': '#A8E6CF'
     },
     {
@@ -136,9 +136,32 @@ def categorize_transaction(description, amount=0.0, merchant=None):
 
     # Check if it's a transfer first, then decide based on amount
     transfer_keywords = ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up',
-                        'revolut bank', 'to ivelina', 'to shady', 'send money', 'receive money', 'p2p']
+                        'revolut bank', 'send money', 'receive money', 'p2p']
 
     is_transfer = any(keyword.lower() in description_lower for keyword in transfer_keywords)
+
+    # Also check if transfer is to the user themselves (exclude from expenses)
+    try:
+        import sqlite3
+        conn = sqlite3.connect('src/database/app.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT setting_value FROM user_settings WHERE setting_key = ?', ('user_name',))
+        result = cursor.fetchone()
+        conn.close()
+
+        user_name = result[0].strip() if result and result[0] else ''
+
+        # Check if transaction mentions user's name (indicates self-transfer)
+        if user_name and len(user_name) > 2:
+            # Check various formats: "to [name]", "[name]", etc.
+            name_variants = [
+                f"to {user_name}".lower(),
+                user_name.lower()
+            ]
+            if any(variant in description_lower for variant in name_variants):
+                is_transfer = True
+    except Exception as e:
+        current_app.logger.warning(f"Error checking user name for transfer: {e}")
 
     if is_transfer:
         # Positive transfers are income, negative transfers stay as transfers

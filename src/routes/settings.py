@@ -318,3 +318,62 @@ def reset_communal_expenses():
             'success': False,
             'message': f'Error resetting communal expenses: {str(e)}'
         }), 500
+# User Settings Endpoints
+
+@settings_bp.route('/user', methods=['GET'])
+def get_user_settings():
+    """Get user settings including user's name for transfer exclusion."""
+    try:
+        import sqlite3
+        conn = sqlite3.connect('src/database/app.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT setting_value FROM user_settings WHERE setting_key = ?', ('user_name',))
+        result = cursor.fetchone()
+        conn.close()
+        
+        user_name = result[0] if result else ''
+        
+        return jsonify({
+            'success': True,
+            'user_name': user_name
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error fetching user settings: {str(e)}'
+        }), 500
+
+
+@settings_bp.route('/user', methods=['PUT'])
+def update_user_settings():
+    """Update user settings including user's name."""
+    try:
+        data = request.get_json()
+        user_name = data.get('user_name', '').strip()
+        
+        import sqlite3
+        conn = sqlite3.connect('src/database/app.db')
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE user_settings 
+            SET setting_value = ?, updated_at = CURRENT_TIMESTAMP 
+            WHERE setting_key = ?
+        ''', (user_name, 'user_name'))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'User settings updated successfully',
+            'user_name': user_name
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error updating user settings: {str(e)}'
+        }), 500

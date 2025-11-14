@@ -377,7 +377,7 @@ class TestFinanceRoutes:
         )
         transfer = Transaction(
             date=date(2024, 1, 18),
-            description='To Ivelina Taneva Dimova',
+            description='IMMEDIATE TFR',
             amount=-200.00,
             category='Transfers'
         )

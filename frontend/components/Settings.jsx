@@ -10,9 +10,12 @@ const Settings = () => {
   const [error, setError] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [userName, setUserName] = useState('')
+  const [savingUserName, setSavingUserName] = useState(false)
 
   useEffect(() => {
     loadCommunalExpenseTypes()
+    loadUserSettings()
   }, [])
 
   const loadCommunalExpenseTypes = async () => {
@@ -24,6 +27,31 @@ const Settings = () => {
       setError(`Failed to load settings: ${err.message}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadUserSettings = async () => {
+    try {
+      const response = await settingsApi.getUserSettings()
+      if (response.data.success) {
+        setUserName(response.data.user_name || '')
+      }
+    } catch (err) {
+      console.error('Failed to load user settings:', err)
+    }
+  }
+
+  const handleSaveUserName = async () => {
+    try {
+      setSavingUserName(true)
+      const response = await settingsApi.updateUserSettings({ user_name: userName })
+      if (response.data.success) {
+        alert('User name saved successfully!')
+      }
+    } catch (err) {
+      setError(`Failed to save user name: ${err.response?.data?.message || err.message}`)
+    } finally {
+      setSavingUserName(false)
     }
   }
 
@@ -157,7 +185,7 @@ const Settings = () => {
             <AlertTriangle className="text-red-500 mr-2" size={20} />
             <p className="text-red-700">{error}</p>
           </div>
-          <button 
+          <button
             onClick={() => setError('')}
             className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
           >
@@ -165,6 +193,42 @@ const Settings = () => {
           </button>
         </div>
       )}
+
+      {/* Personal Settings Section */}
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Personal Settings</h3>
+          <p className="text-gray-600 text-sm">Configure your personal information</p>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Your Name
+            </label>
+            <p className="text-xs text-gray-500 mb-2">
+              Used to automatically exclude transfers to yourself from expenses
+            </p>
+            <div className="flex items-center space-x-3">
+              <input
+                type="text"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="Enter your name (e.g., John Smith)"
+              />
+              <button
+                onClick={handleSaveUserName}
+                disabled={savingUserName}
+                className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+              >
+                <Save size={16} className="mr-1" />
+                {savingUserName ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Communal Expenses Section */}
       <div className="bg-white rounded-lg shadow-lg p-6">
