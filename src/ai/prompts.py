@@ -44,12 +44,30 @@ Receipt Text:
 {ocr_text}
 
 Instructions:
-1. Find the merchant/business name (usually at the top)
+1. Find the MERCHANT/BUSINESS name - this is the SELLER/PROVIDER of goods or services:
+   - Usually at the top in large/bold text
+   - Look for company names, shop names, business identifiers
+   - Common indicators: "Ltd", "S.A.", "Inc", "GmbH", business logos, tax IDs
+   - DO NOT confuse with customer/recipient/billing name (often labeled "Customer:", "Bill to:", "Client:", "Name:")
+   - NEVER return a personal name as merchant (e.g., "John Smith", "Maria Garcia")
+   - Personal names are ALWAYS the customer, NEVER the merchant
+   - If you can only find personal names, return "Unknown" instead
+
 2. Find the date (various formats: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, text months)
-3. Find the total amount (look for "Total", "Amount Due", or the largest number)
+
+3. Find the total amount (look for "Total", "Amount Due", "Grand Total", or the largest monetary value)
+
 4. Handle OCR errors gracefully (e.g., "5TARBUCK5" = "Starbucks")
+
 5. If date is ambiguous, prefer DD/MM/YYYY format (European)
+
 6. Currency should be inferred from context (default to EUR)
+
+Key distinction:
+- ✓ Merchant: Business name with company indicators (Ltd, S.A., Inc), usually in large text at top
+- ✗ NOT Merchant: Text preceded by "Customer:", "Bill to:", "Client:", "Recipient:" - these are the buyer, NOT the seller
+
+IMPORTANT: If you cannot find a clear business/merchant name, return "Unknown" - DO NOT guess or make up a name.
 
 Respond ONLY with valid JSON in this exact format:
 

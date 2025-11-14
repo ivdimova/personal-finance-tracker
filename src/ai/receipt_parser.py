@@ -73,6 +73,36 @@ def extract_receipt_data(
         currency = result.get('currency', 'EUR')
         confidence = float(result.get('confidence', 0.0))
 
+        # Validate merchant is not a personal name
+        if merchant and merchant != 'Unknown':
+            # Check if merchant looks like a personal name (no business indicators)
+            business_indicators = [
+                'ltd', 'inc', 'llc', 'corp', 'gmbh', 's.a.', 'plc', 'pte',
+                'co.', 'company', 'limited', 'store', 'shop', 'cafe', 'restaurant',
+                'hotel', 'market', 'center', 'service', 'group', '&', 'and'
+            ]
+
+            merchant_lower = merchant.lower()
+            has_business_indicator = any(
+                indicator in merchant_lower for indicator in business_indicators
+            )
+
+            # Check if it looks like a personal name (2-3 words, all capitalized first letters)
+            words = merchant.split()
+            looks_like_personal_name = (
+                len(words) == 2 or len(words) == 3
+            ) and all(
+                word[0].isupper() and word[1:].islower() for word in words if word
+            )
+
+            # Reject if it looks like a personal name without business indicators
+            if looks_like_personal_name and not has_business_indicator:
+                logger.warning(
+                    f"Rejected merchant '{merchant}' - appears to be a personal name"
+                )
+                merchant = 'Unknown'
+                confidence = 0.5  # Lower confidence since we rejected the merchant
+
         # Validate confidence
         if not (0.0 <= confidence <= 1.0):
             logger.warning(f"Invalid confidence value: {confidence}")
