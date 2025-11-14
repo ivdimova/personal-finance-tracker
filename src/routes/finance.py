@@ -119,23 +119,34 @@ def initialize_categories():
             db.session.add(category)
     db.session.commit()
 
-def categorize_transaction(description, amount=0.0):
-    """Auto-categorize transaction based on description and amount"""
+def categorize_transaction(description, amount=0.0, merchant=None):
+    """
+    Auto-categorize transaction based on description and amount.
+    Uses AI categorization with fallback to keyword matching.
+
+    Args:
+        description: Transaction description
+        amount: Transaction amount
+        merchant: Optional merchant name
+
+    Returns:
+        Category name string
+    """
     description_lower = description.lower()
-    
+
     # Check if it's a transfer first, then decide based on amount
-    transfer_keywords = ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up', 
+    transfer_keywords = ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up',
                         'revolut bank', 'to ivelina', 'to shady', 'send money', 'receive money', 'p2p']
-    
+
     is_transfer = any(keyword.lower() in description_lower for keyword in transfer_keywords)
-    
+
     if is_transfer:
         # Positive transfers are income, negative transfers stay as transfers
         if amount > 0:
             return 'Income'
         else:
             return 'Transfers'
-    
+
     # Check user-defined communal expenses first (higher priority)
     communal_expense_types = CommunalExpenseType.query.filter_by(is_active=True).all()
     for expense_type in communal_expense_types:
@@ -144,8 +155,35 @@ def categorize_transaction(description, amount=0.0):
             for keyword in keywords:
                 if keyword.lower() in description_lower:
                     return f'Communal - {expense_type.name}'
-    
-    # Regular categorization for non-transfers and non-communal expenses
+
+    # Try AI categorization (for non-transfers and non-communal expenses)
+    try:
+        from src.ai.categorizer import categorize_transaction as ai_categorize
+        from src.ai.categorizer import should_use_ai_category
+        import os
+
+        ai_enabled = os.getenv("AI_ENABLED", "true").lower() == "true"
+
+        if ai_enabled:
+            ai_result = ai_categorize(
+                description=description,
+                amount=abs(amount),
+                merchant=merchant or "Unknown"
+            )
+
+            # Use AI result if confidence is high enough
+            if should_use_ai_category(ai_result):
+                ai_category = ai_result['category']
+                current_app.logger.info(
+                    f"AI categorized '{description}' as '{ai_category}' "
+                    f"(confidence: {ai_result['confidence']:.2%})"
+                )
+                return ai_category
+
+    except Exception as e:
+        current_app.logger.warning(f"AI categorization failed, using fallback: {e}")
+
+    # Fallback to keyword-based categorization
     categories = Category.query.all()
     for category in categories:
         if category.keywords and category.name not in ['Income', 'Transfers']:
@@ -153,7 +191,7 @@ def categorize_transaction(description, amount=0.0):
             for keyword in keywords:
                 if keyword.lower() in description_lower:
                     return category.name
-    
+
     return 'Other'
 
 def detect_and_remove_refunds():

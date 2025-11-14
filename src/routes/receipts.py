@@ -10,6 +10,7 @@ from pathlib import Path
 import pytesseract
 from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import PyPDF2
+from pdf2image import convert_from_path
 from io import BytesIO
 import numpy as np
 
@@ -254,89 +255,169 @@ def extract_text_from_image(file_path):
         return ""
 
 def extract_text_from_pdf(file_path):
-    """Extract text from PDF"""
+    """
+    Extract text from PDF - handles both text-based and scanned PDFs.
+    First tries PyPDF2 for text extraction, then falls back to OCR if needed.
+    """
     try:
         text = ""
-        with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        
-        return text.strip()
-        
+
+        # Try PyPDF2 first (fast for text-based PDFs)
+        try:
+            with open(file_path, 'rb') as file:
+                pdf_reader = PyPDF2.PdfReader(file)
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+        except Exception as pdf_error:
+            current_app.logger.warning(f"PyPDF2 extraction failed: {str(pdf_error)}")
+
+        # If we got meaningful text, return it
+        if len(text.strip()) > 50:
+            current_app.logger.info(f"Extracted {len(text)} chars using PyPDF2")
+            return text.strip()
+
+        # Otherwise, treat as scanned PDF and use OCR
+        current_app.logger.info("PDF appears to be scanned, using OCR...")
+
+        # Convert PDF to images (300 DPI for good OCR quality)
+        images = convert_from_path(file_path, dpi=300)
+        current_app.logger.info(f"Converted PDF to {len(images)} images")
+
+        # Run OCR on each page
+        all_text = []
+        for i, image in enumerate(images):
+            current_app.logger.info(f"Processing page {i+1}/{len(images)} with OCR")
+
+            # Use the existing preprocessing pipeline for better OCR
+            processed_images = preprocess_png_image(image)
+
+            # Try OCR on each preprocessed variant, take the longest result
+            best_text = ""
+            for variant_idx, processed_img in enumerate(processed_images):
+                try:
+                    variant_text = pytesseract.image_to_string(processed_img)
+                    if len(variant_text) > len(best_text):
+                        best_text = variant_text
+                except Exception as ocr_error:
+                    current_app.logger.warning(f"OCR failed on variant {variant_idx}: {str(ocr_error)}")
+                    continue
+
+            if best_text:
+                all_text.append(best_text)
+
+        # Combine all pages
+        combined_text = "\n\n".join(all_text)
+        current_app.logger.info(f"OCR extracted {len(combined_text)} chars from PDF")
+        return combined_text.strip()
+
     except Exception as e:
         current_app.logger.error(f"PDF text extraction error: {str(e)}")
         return ""
 
 def extract_receipt_info(file_path, filename):
-    """Extract information from receipt using OCR and text analysis"""
+    """
+    Extract information from receipt using OCR and text analysis.
+    Uses AI-powered parsing with fallback to regex-based extraction.
+    """
     current_app.logger.info(f"Processing receipt: {filename}")
-    
+
     try:
         # Extract text from file using OCR
         extracted_text = extract_text_from_file(file_path, filename)
         current_app.logger.info(f"Extracted {len(extracted_text)} characters from {filename}")
-        
-        # Combine filename analysis with OCR text analysis
-        merchant_from_filename = detect_merchant_from_filename(filename)
-        merchant_from_text = detect_merchant_from_text(extracted_text)
-        current_app.logger.info(f"Merchants: filename='{merchant_from_filename}', OCR='{merchant_from_text}'")
-        
-        # Smart merchant selection - consider quality of OCR result
-        def is_poor_ocr_result(ocr_merchant):
-            """Check if OCR result is likely a poor reading of a logo/image"""
-            if ocr_merchant == 'Unknown' or len(ocr_merchant) <= 1:
-                return True
-            
-            # Only reject very obvious poor OCR readings
-            poor_ocr_patterns = [
-                'issue', 'issuer', 'dear', 'minutes', 'subject',
-                'waterside', 'registered', 'office'
-            ]
-            
-            ocr_lower = ocr_merchant.lower().strip()
-            # Only reject if it's an exact match to avoid false positives
-            if ocr_lower in poor_ocr_patterns:
-                current_app.logger.info(f"OCR result '{ocr_merchant}' appears to be poor quality (exact match to poor OCR pattern)")
-                return True
-                
-            # Only reject very short results (2 chars or less)
-            if len(ocr_merchant) <= 2:
-                return True
-                
-            return False
-        
-        # Prefer filename if OCR result is poor, otherwise use OCR
-        if merchant_from_text != 'Unknown' and not is_poor_ocr_result(merchant_from_text):
-            merchant = merchant_from_text
-        else:
-            # Use filename, but if that's also poor, try to extract from OCR text using known merchants
-            if merchant_from_filename == 'Unknown' or len(merchant_from_filename) < 3:
-                # Try to find known merchants in the OCR text even if the parsing failed
-                merchant = find_known_merchant_in_text(extracted_text)
-                if merchant == 'Unknown':
-                    merchant = merchant_from_filename
+
+        # Try AI-powered receipt parsing first
+        merchant = None
+        receipt_date = None
+        amount = None
+
+        try:
+            from src.ai.receipt_parser import extract_receipt_data
+            import os
+
+            ai_enabled = os.getenv("AI_ENABLED", "true").lower() == "true"
+
+            if ai_enabled and len(extracted_text) >= 10:
+                current_app.logger.info("Attempting AI receipt parsing...")
+                ai_result = extract_receipt_data(extracted_text)
+
+                if ai_result and ai_result.get('confidence', 0) >= 0.75:
+                    merchant = ai_result.get('merchant')
+                    receipt_date = ai_result.get('date')
+                    amount = ai_result.get('amount')
+
+                    current_app.logger.info(
+                        f"AI parsed receipt: merchant={merchant}, "
+                        f"date={receipt_date}, amount={amount}"
+                    )
+
+        except Exception as e:
+            current_app.logger.warning(f"AI receipt parsing failed, using fallback: {e}")
+
+        # Fallback to regex-based parsing if AI didn't get good results
+        if not merchant or merchant == 'Unknown':
+            # Combine filename analysis with OCR text analysis
+            merchant_from_filename = detect_merchant_from_filename(filename)
+            merchant_from_text = detect_merchant_from_text(extracted_text)
+            current_app.logger.info(f"Merchants: filename='{merchant_from_filename}', OCR='{merchant_from_text}'")
+
+            # Smart merchant selection - consider quality of OCR result
+            def is_poor_ocr_result(ocr_merchant):
+                """Check if OCR result is likely a poor reading of a logo/image"""
+                if ocr_merchant == 'Unknown' or len(ocr_merchant) <= 1:
+                    return True
+
+                # Only reject very obvious poor OCR readings
+                poor_ocr_patterns = [
+                    'issue', 'issuer', 'dear', 'minutes', 'subject',
+                    'waterside', 'registered', 'office'
+                ]
+
+                ocr_lower = ocr_merchant.lower().strip()
+                # Only reject if it's an exact match to avoid false positives
+                if ocr_lower in poor_ocr_patterns:
+                    current_app.logger.info(f"OCR result '{ocr_merchant}' appears to be poor quality (exact match to poor OCR pattern)")
+                    return True
+
+                # Only reject very short results (2 chars or less)
+                if len(ocr_merchant) <= 2:
+                    return True
+
+                return False
+
+            # Prefer filename if OCR result is poor, otherwise use OCR
+            if merchant_from_text != 'Unknown' and not is_poor_ocr_result(merchant_from_text):
+                merchant = merchant_from_text
             else:
-                merchant = merchant_from_filename
-        
-        # Try to detect date from OCR text first, then filename
-        receipt_date = detect_date_from_text(extracted_text)
-        current_app.logger.info(f"Date from OCR: {receipt_date}")
-        
+                # Use filename, but if that's also poor, try to extract from OCR text using known merchants
+                if merchant_from_filename == 'Unknown' or len(merchant_from_filename) < 3:
+                    # Try to find known merchants in the OCR text even if the parsing failed
+                    merchant = find_known_merchant_in_text(extracted_text)
+                    if merchant == 'Unknown':
+                        merchant = merchant_from_filename
+                else:
+                    merchant = merchant_from_filename
+
         if not receipt_date:
-            receipt_date = detect_date_from_filename(filename)
-            current_app.logger.info(f"Date from filename: {receipt_date}")
-            
-        if not receipt_date:
-            receipt_date = datetime.now().strftime('%Y-%m-%d')
-            current_app.logger.info(f"Using current date as fallback: {receipt_date}")
-        
-        # Detect amount from OCR text
-        amount = detect_amount_from_text(extracted_text)
-        current_app.logger.info(f"Amount detected: {amount}")
-        
+            # Try to detect date from OCR text first, then filename
+            receipt_date = detect_date_from_text(extracted_text)
+            current_app.logger.info(f"Date from OCR: {receipt_date}")
+
+            if not receipt_date:
+                receipt_date = detect_date_from_filename(filename)
+                current_app.logger.info(f"Date from filename: {receipt_date}")
+
+            if not receipt_date:
+                receipt_date = datetime.now().strftime('%Y-%m-%d')
+                current_app.logger.info(f"Using current date as fallback: {receipt_date}")
+
+        if not amount:
+            # Detect amount from OCR text
+            amount = detect_amount_from_text(extracted_text)
+            current_app.logger.info(f"Amount detected: {amount}")
+
         return {
             'success': True,
             'merchant': merchant,
