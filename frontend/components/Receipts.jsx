@@ -203,7 +203,7 @@ const Receipts = () => {
           
           {/* Summary */}
           <div className="bg-blue-50 rounded-lg p-4 mb-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="text-center">
                 <p className="text-sm text-blue-700">Total Files</p>
                 <p className="text-xl font-bold text-blue-900">{uploadResults.summary?.total_files || 0}</p>
@@ -215,6 +215,10 @@ const Receipts = () => {
               <div className="text-center">
                 <p className="text-sm text-red-700">Failed</p>
                 <p className="text-xl font-bold text-red-900">{uploadResults.summary?.failed || 0}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-sm text-yellow-700">Total Amount</p>
+                <p className="text-xl font-bold text-yellow-900">€{uploadResults.summary?.total_amount || 0}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-purple-700">Processing Time</p>

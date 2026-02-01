@@ -999,7 +999,14 @@ def upload_receipts():
                 failed += 1
         
         processing_time = round(time.time() - start_time, 2)
-        
+
+        # Calculate total amount from all successfully parsed receipts
+        total_amount = sum(
+            r.get('amount', 0) or 0
+            for r in results
+            if r.get('success') and r.get('amount')
+        )
+
         return jsonify({
             'success': True,
             'receipts': results,
@@ -1008,6 +1015,7 @@ def upload_receipts():
                 'successful': successful,
                 'failed': failed,
                 'processing_time': processing_time,
+                'total_amount': round(total_amount, 2),
             }
         })
         
