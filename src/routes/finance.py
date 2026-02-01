@@ -8,7 +8,7 @@ import json
 import re
 from src.models.transaction import Transaction, Category
 from src.models.communal_expense import CommunalExpenseType
-from src.models.user import db
+from src.models.user import db, UserSettings
 
 finance_bp = Blueprint('finance', __name__)
 
@@ -119,6 +119,37 @@ def initialize_categories():
             db.session.add(category)
     db.session.commit()
 
+def normalize_category_name(category):
+    """
+    Normalize category names to match predefined categories.
+    Maps AI-returned category names to standard category names.
+
+    Args:
+        category: Category name from AI or other source
+
+    Returns:
+        Normalized category name
+    """
+    # Map alternative names to standard categories
+    category_mappings = {
+        'shopping': 'Shopping & Retail',
+        'retail': 'Shopping & Retail',
+        'healthcare': 'Health & Wellness',
+        'health': 'Health & Wellness',
+        'wellness': 'Health & Wellness',
+        'travel': 'Travel & Hotels',
+        'hotels': 'Travel & Hotels',
+        'accommodation': 'Travel & Hotels',
+        'bills': 'Bills & Utilities',
+        'utilities': 'Bills & Utilities',
+        'food': 'Food & Dining',
+        'dining': 'Food & Dining'
+    }
+
+    # Check if the category needs normalization
+    category_lower = category.lower().strip()
+    return category_mappings.get(category_lower, category)
+
 def categorize_transaction(description, amount=0.0, merchant=None):
     """
     Auto-categorize transaction based on description and amount.
@@ -142,14 +173,8 @@ def categorize_transaction(description, amount=0.0, merchant=None):
 
     # Also check if transfer is to the user themselves (exclude from expenses)
     try:
-        import sqlite3
-        conn = sqlite3.connect('src/database/app.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT setting_value FROM user_settings WHERE setting_key = ?', ('user_name',))
-        result = cursor.fetchone()
-        conn.close()
-
-        user_name = result[0].strip() if result and result[0] else ''
+        user_name = UserSettings.get('user_name', '')
+        user_name = user_name.strip() if user_name else ''
 
         # Check if transaction mentions user's name (indicates self-transfer)
         if user_name and len(user_name) > 2:
@@ -197,11 +222,13 @@ def categorize_transaction(description, amount=0.0, merchant=None):
             # Use AI result if confidence is high enough
             if should_use_ai_category(ai_result):
                 ai_category = ai_result['category']
+                # Normalize the category name to match predefined categories
+                normalized_category = normalize_category_name(ai_category)
                 current_app.logger.info(
                     f"AI categorized '{description}' as '{ai_category}' "
-                    f"(confidence: {ai_result['confidence']:.2%})"
+                    f"(normalized to '{normalized_category}', confidence: {ai_result['confidence']:.2%})"
                 )
-                return ai_category
+                return normalized_category
 
     except Exception as e:
         current_app.logger.warning(f"AI categorization failed, using fallback: {e}")
@@ -467,7 +494,13 @@ def parse_space_delimited_banking_file(file_path, sample_lines):
 def parse_csv_file(file_path):
     """Parse CSV file and extract transactions"""
     transactions = []
-    
+    skipped_lines = []  # Track lines that couldn't be parsed
+
+    def handle_bad_line(bad_line):
+        """Callback to capture lines with inconsistent field counts."""
+        skipped_lines.append(bad_line)
+        return None  # Skip this line
+
     try:
         # First check if this is a space-delimited format (like Portuguese banking)
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -492,7 +525,10 @@ def parse_csv_file(file_path):
                 current_app.logger.info(f"DEBUG: Testing delimiter '{delimiter}'")
                 try:
                     # First try with headers
-                    df_with_headers = pd.read_csv(file_path, encoding=encoding, dtype=str, sep=delimiter)
+                    df_with_headers = pd.read_csv(
+                        file_path, encoding=encoding, dtype=str, sep=delimiter,
+                        on_bad_lines=handle_bad_line, engine='python'
+                    )
                     
                     # Skip if we only got 1 column and it's not the comma delimiter
                     if len(df_with_headers.columns) == 1 and delimiter != ',':
@@ -550,7 +586,10 @@ def parse_csv_file(file_path):
                         if has_date_in_columns or (not has_date_in_first_row and len(df_with_headers.columns) > 4 and not has_proper_headers):
                             # No headers, read again without headers
                             current_app.logger.info(f"DEBUG: Reading without headers")
-                            best_result = (pd.read_csv(file_path, encoding=encoding, dtype=str, header=None, sep=delimiter), encoding, delimiter)
+                            best_result = (pd.read_csv(
+                                file_path, encoding=encoding, dtype=str, header=None, sep=delimiter,
+                                on_bad_lines=handle_bad_line, engine='python'
+                            ), encoding, delimiter)
                         else:
                             current_app.logger.info(f"DEBUG: Reading with headers")
                             best_result = (df_with_headers, encoding, delimiter)
@@ -847,10 +886,20 @@ def parse_csv_file(file_path):
                 continue  # Skip invalid rows
         
         current_app.logger.info(f"DEBUG: Processed {processed_rows} rows, skipped {skipped_rows}, created {len(transactions)} transactions")
-                
+
+        # Report lines that were skipped due to inconsistent field counts
+        if skipped_lines:
+            current_app.logger.warning(
+                f"CSV PARSING: {len(skipped_lines)} line(s) skipped due to inconsistent "
+                "field count (likely unquoted commas in description). "
+                "Please add these transactions manually:"
+            )
+            for i, line in enumerate(skipped_lines, 1):
+                current_app.logger.warning(f"  Skipped line {i}: {line}")
+
     except Exception as e:
         raise ValueError(f"Error parsing CSV file: {str(e)}")
-    
+
     return transactions
 
 @finance_bp.route('/upload', methods=['POST'])
@@ -945,8 +994,13 @@ def upload_file():
 def get_transactions():
     """Get all transactions with optional filtering"""
     category = request.args.get('category')
+    merchant = request.args.get('merchant')
 
     query = Transaction.query
+
+    # Filter by merchant/description (case-insensitive search)
+    if merchant:
+        query = query.filter(Transaction.description.ilike(f'%{merchant}%'))
 
     if category:
         if category == 'Bills & Utilities':
@@ -994,10 +1048,12 @@ def get_transactions():
         }
     }
     
-    # Add category info if filtering by category
+    # Add filter info to response
     if category:
         response_data['filtered_by_category'] = category
-    
+    if merchant:
+        response_data['filtered_by_merchant'] = merchant
+
     return jsonify(response_data)
 
 @finance_bp.route('/categories', methods=['GET'])

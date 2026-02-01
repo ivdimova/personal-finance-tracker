@@ -8,6 +8,7 @@ import pytest
 import json
 from datetime import date
 from src.models.communal_expense import CommunalExpenseType, CommunalExpense
+from src.models.user import UserSettings
 
 
 class TestCommunalExpenseTypesAPI:
@@ -513,3 +514,78 @@ class TestSettingsIntegration:
         response = client.get('/api/settings/communal-expenses')
         expenses = response.get_json()
         assert any(e['id'] == expense_id for e in expenses)
+
+
+class TestUserSettingsAPI:
+    """Test the user settings API endpoints."""
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.settings
+    def test_get_user_settings_default(self, client, db_session):
+        """Test getting user settings when none are set."""
+        response = client.get('/api/settings/user')
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['user_name'] == '' or data['user_name'] is None
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.settings
+    def test_update_user_settings(self, client, db_session):
+        """Test updating user settings."""
+        update_data = {'user_name': 'John Doe'}
+
+        response = client.put('/api/settings/user', json=update_data)
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['success'] is True
+        assert data['user_name'] == 'John Doe'
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.settings
+    def test_user_settings_persistence(self, client, db_session):
+        """Test that user settings persist after being set."""
+        # Set the user name
+        update_data = {'user_name': 'Jane Smith'}
+        response = client.put('/api/settings/user', json=update_data)
+        assert response.status_code == 200
+
+        # Retrieve and verify
+        response = client.get('/api/settings/user')
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['user_name'] == 'Jane Smith'
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.settings
+    def test_update_user_settings_empty_name(self, client, db_session):
+        """Test updating user settings with empty name."""
+        # First set a name
+        client.put('/api/settings/user', json={'user_name': 'Test User'})
+
+        # Then clear it
+        response = client.put('/api/settings/user', json={'user_name': ''})
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['user_name'] == ''
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.settings
+    def test_update_user_settings_strips_whitespace(self, client, db_session):
+        """Test that user name is stripped of leading/trailing whitespace."""
+        update_data = {'user_name': '  John Doe  '}
+
+        response = client.put('/api/settings/user', json=update_data)
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['user_name'] == 'John Doe'

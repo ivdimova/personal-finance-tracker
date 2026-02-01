@@ -6,14 +6,12 @@ Available categories:
 - Food & Dining: Restaurants, cafes, food delivery, groceries, supermarkets
 - Transportation: Uber, taxis, public transit, gas stations, parking, ride-sharing
 - Bills & Utilities: Electricity, water, internet, phone, insurance, government payments, social security, taxes
-- Shopping: Retail purchases, online shopping, clothing, electronics, general stores, drugstores (non-medical items)
+- Shopping & Retail: Retail purchases, online shopping, clothing, electronics, general stores, drugstores (non-medical items)
 - Entertainment: Movies, concerts, games, streaming services, subscriptions
-- Healthcare: Doctor visits, pharmacies, hospitals, medical clinics, health insurance, prescriptions
-- Travel: Hotels, flights, vacation expenses, resorts, campgrounds, accommodations
-- Education: Courses, books, tuition, training
-- Personal Care: Haircuts, spa, gym memberships, beauty products
-- Transfers: Money transfers between accounts
+- Health & Wellness: Doctor visits, pharmacies, hospitals, medical clinics, health insurance, prescriptions
+- Travel & Hotels: Hotels, flights, vacation expenses, resorts, campgrounds, accommodations
 - Other: Anything that doesn't fit above categories
+- Transfers: Money transfers between accounts
 
 Common patterns to recognize:
 - Pharmacies: Often contain words like "FARMACIA", "PHARMACY", "DRUG", "RX", "APOTEK"

@@ -183,6 +183,32 @@ class TestFinanceRoutes:
     @pytest.mark.unit
     @pytest.mark.api
     @pytest.mark.finance
+    def test_get_transactions_filter_by_merchant(self, client, sample_transactions):
+        """Test filtering transactions by merchant name (case-insensitive search)."""
+        response = client.get('/api/transactions?merchant=restaurant')
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert data['filtered_by_merchant'] == 'restaurant'
+        # All returned transactions should contain 'restaurant' in description
+        for transaction in data['transactions']:
+            assert 'restaurant' in transaction['description'].lower()
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.finance
+    def test_get_transactions_filter_by_merchant_no_match(self, client, sample_transactions):
+        """Test filtering by merchant with no matches."""
+        response = client.get('/api/transactions?merchant=nonexistent')
+        assert response.status_code == 200
+
+        data = response.get_json()
+        assert len(data['transactions']) == 0
+        assert data['filtered_by_merchant'] == 'nonexistent'
+
+    @pytest.mark.unit
+    @pytest.mark.api
+    @pytest.mark.finance
     def test_get_categories(self, client, sample_categories):
         """Test getting all categories."""
         response = client.get('/api/categories')

@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 import json
 from datetime import datetime, date
 from src.models.communal_expense import CommunalExpenseType, CommunalExpense
-from src.models.user import db
+from src.models.user import db, UserSettings
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -324,21 +324,13 @@ def reset_communal_expenses():
 def get_user_settings():
     """Get user settings including user's name for transfer exclusion."""
     try:
-        import sqlite3
-        conn = sqlite3.connect('src/database/app.db')
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT setting_value FROM user_settings WHERE setting_key = ?', ('user_name',))
-        result = cursor.fetchone()
-        conn.close()
-        
-        user_name = result[0] if result else ''
-        
+        user_name = UserSettings.get('user_name', '')
+
         return jsonify({
             'success': True,
             'user_name': user_name
         })
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -352,27 +344,17 @@ def update_user_settings():
     try:
         data = request.get_json()
         user_name = data.get('user_name', '').strip()
-        
-        import sqlite3
-        conn = sqlite3.connect('src/database/app.db')
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE user_settings 
-            SET setting_value = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE setting_key = ?
-        ''', (user_name, 'user_name'))
-        
-        conn.commit()
-        conn.close()
-        
+
+        UserSettings.set('user_name', user_name)
+
         return jsonify({
             'success': True,
             'message': 'User settings updated successfully',
             'user_name': user_name
         })
-        
+
     except Exception as e:
+        db.session.rollback()
         return jsonify({
             'success': False,
             'message': f'Error updating user settings: {str(e)}'
