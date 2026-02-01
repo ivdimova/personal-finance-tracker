@@ -3,7 +3,8 @@
 CATEGORIZATION_PROMPT = """You are a financial transaction categorizer. Analyze the transaction and determine the most appropriate category.
 
 Available categories:
-- Food & Dining: Restaurants, cafes, food delivery, groceries, supermarkets
+- Food & Dining: Restaurants, cafes, bars, fast food, food delivery apps (Glovo, UberEats), takeaway, bakeries
+- Supermarkets & Groceries: Supermarkets (Mercadona, Lidl, Carrefour, Auchan, Continente, Pingo Doce), grocery stores, food shops
 - Transportation: Uber, taxis, public transit, gas stations, parking, ride-sharing
 - Bills & Utilities: Electricity, water, internet, phone, insurance, government payments, social security, taxes
 - Shopping & Retail: Retail purchases, online shopping, clothing, electronics, general stores, drugstores (non-medical items)

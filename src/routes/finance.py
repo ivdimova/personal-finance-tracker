@@ -29,11 +29,21 @@ def ensure_upload_folder():
 DEFAULT_CATEGORIES = [
     {
         'name': 'Food & Dining',
-        'keywords': ['restaurant', 'cafe', 'food', 'grocery', 'supermarket', 'mcdonalds', 'starbucks', 'pizza', 'delivery', 
-                    'glovo', 'deli', 'aroma', 'newcoffee', 'traveller caf', 'ssp hellas', 'mega place', 'publix', 
-                    'farmacia saude', 'matteo biancardi', 'krhtikos', 'wine bar', 'lounge', 'bistro', 'bakery', 
-                    'bakey', 'gelato', 'so fresh', 'solea', 'bar', 'celeiro', 'belmiro'],
+        'keywords': ['restaurant', 'cafe', 'mcdonalds', 'starbucks', 'pizza', 'burger', 'kfc', 'subway',
+                    'glovo', 'deli', 'aroma', 'newcoffee', 'traveller caf', 'ssp hellas', 'mega place',
+                    'matteo biancardi', 'krhtikos', 'wine bar', 'lounge', 'bistro', 'bakery',
+                    'bakey', 'gelato', 'so fresh', 'solea', 'bar', 'belmiro', 'tapas', 'sushi',
+                    'kebab', 'taco', 'noodles', 'ramen', 'poke', 'brunch', 'dinner', 'lunch'],
         'color': '#FF6B6B'
+    },
+    {
+        'name': 'Supermarkets & Groceries',
+        'keywords': ['mercadona', 'lidl', 'tienda', 'supermarket', 'grocery', 'supermercado', 'hipermercado',
+                    'continente', 'pingo doce', 'auchan', 'carrefour', 'jumbo', 'minipreco', 'intermarche',
+                    'dia', 'aldi', 'eroski', 'alcampo', 'hipercor', 'el corte ingles alimentacion',
+                    'publix', 'whole foods', 'trader joe', 'kroger', 'safeway', 'tesco', 'sainsbury',
+                    'waitrose', 'asda', 'morrisons', 'celeiro', 'bio', 'organic market', 'farmacia saude'],
+        'color': '#7ED321'
     },
     {
         'name': 'Transportation',
@@ -62,9 +72,9 @@ DEFAULT_CATEGORIES = [
         'name': 'Shopping & Retail',
         'keywords': ['amazon', 'store', 'mall', 'shop', 'retail', 'clothing', 'electronics', 'purchase',
                     'card purchase', 'ellestia mall', 'television por', 'arbitrade', 'cursor', 'zara',
-                    'h&m', 'mango', 'fnac', 'continente', 'pingo doce', 'auchan', 'lidl', 'carrefour',
-                    'el corte ingles', 'worten', 'media markt', 'primark', 'bershka', 'pull&bear',
-                    'stradivarius', 'massimo dutti', 'decathlon', 'ikea', 'leroy merlin', 'jumbo'],
+                    'h&m', 'mango', 'fnac', 'el corte ingles', 'worten', 'media markt', 'primark',
+                    'bershka', 'pull&bear', 'stradivarius', 'massimo dutti', 'decathlon', 'ikea',
+                    'leroy merlin', 'aliexpress', 'shein', 'asos', 'zalando'],
         'color': '#96CEB4'
     },
     {
@@ -143,7 +153,12 @@ def normalize_category_name(category):
         'bills': 'Bills & Utilities',
         'utilities': 'Bills & Utilities',
         'food': 'Food & Dining',
-        'dining': 'Food & Dining'
+        'dining': 'Food & Dining',
+        'restaurants': 'Food & Dining',
+        'supermarket': 'Supermarkets & Groceries',
+        'supermarkets': 'Supermarkets & Groceries',
+        'grocery': 'Supermarkets & Groceries',
+        'groceries': 'Supermarkets & Groceries',
     }
 
     # Check if the category needs normalization
