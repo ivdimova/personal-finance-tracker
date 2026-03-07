@@ -41,6 +41,8 @@ export const transactionsApi = {
       timeout: 120000, // 2 minutes for CSV processing
     })
   },
+  updateCategory: (transactionId, category, remember = true) =>
+    api.put(`/transactions/${transactionId}/category`, { category, remember }),
 }
 
 // Categories API

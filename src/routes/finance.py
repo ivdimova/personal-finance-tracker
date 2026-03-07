@@ -8,6 +8,7 @@ import json
 import re
 from src.models.transaction import Transaction, Category
 from src.models.communal_expense import CommunalExpenseType
+from src.models.category_override import CategoryOverride
 from src.models.user import db, UserSettings
 
 finance_bp = Blueprint('finance', __name__)
@@ -38,7 +39,7 @@ DEFAULT_CATEGORIES = [
     },
     {
         'name': 'Supermarkets & Groceries',
-        'keywords': ['mercadona', 'lidl', 'tienda', 'supermarket', 'grocery', 'supermercado', 'hipermercado',
+        'keywords': ['mercadona', 'lidl', 'tienda 51 gran al', 'tienda', 'supermarket', 'grocery', 'supermercado', 'hipermercado',
                     'continente', 'pingo doce', 'auchan', 'carrefour', 'jumbo', 'minipreco', 'intermarche',
                     'dia', 'aldi', 'eroski', 'alcampo', 'hipercor', 'el corte ingles alimentacion',
                     'publix', 'whole foods', 'trader joe', 'kroger', 'safeway', 'tesco', 'sainsbury',
@@ -180,6 +181,16 @@ def categorize_transaction(description, amount=0.0, merchant=None):
     """
     description_lower = description.lower()
 
+    # Check for user-defined category overrides first (highest priority)
+    override = CategoryOverride.query.filter_by(
+        description=description
+    ).first()
+    if override:
+        current_app.logger.info(
+            f"User override matched '{description}' to '{override.category}'"
+        )
+        return override.category
+
     # Check if it's a transfer first, then decide based on amount
     transfer_keywords = ['immediate', 'tfr', 'transfer', 'immediate tfr', 'immediate transfer', 'top-up',
                         'revolut bank', 'send money', 'receive money', 'p2p']
@@ -219,7 +230,20 @@ def categorize_transaction(description, amount=0.0, merchant=None):
                 if keyword.lower() in description_lower:
                     return f'Communal - {expense_type.name}'
 
-    # Try AI categorization (for non-transfers and non-communal expenses)
+    # Keyword-based categorization takes priority over AI
+    categories = Category.query.all()
+    for category in categories:
+        if category.keywords and category.name not in ['Income', 'Transfers']:
+            keywords = json.loads(category.keywords)
+            for keyword in keywords:
+                if keyword.lower() in description_lower:
+                    current_app.logger.info(
+                        f"Keyword matched '{description}' to '{category.name}' "
+                        f"(keyword: '{keyword}')"
+                    )
+                    return category.name
+
+    # Fall back to AI categorization when no keyword match found
     try:
         from src.ai.categorizer import categorize_transaction as ai_categorize
         from src.ai.categorizer import should_use_ai_category
@@ -241,21 +265,13 @@ def categorize_transaction(description, amount=0.0, merchant=None):
                 normalized_category = normalize_category_name(ai_category)
                 current_app.logger.info(
                     f"AI categorized '{description}' as '{ai_category}' "
-                    f"(normalized to '{normalized_category}', confidence: {ai_result['confidence']:.2%})"
+                    f"(normalized to '{normalized_category}', "
+                    f"confidence: {ai_result['confidence']:.2%})"
                 )
                 return normalized_category
 
     except Exception as e:
-        current_app.logger.warning(f"AI categorization failed, using fallback: {e}")
-
-    # Fallback to keyword-based categorization
-    categories = Category.query.all()
-    for category in categories:
-        if category.keywords and category.name not in ['Income', 'Transfers']:
-            keywords = json.loads(category.keywords)
-            for keyword in keywords:
-                if keyword.lower() in description_lower:
-                    return category.name
+        current_app.logger.warning(f"AI categorization failed: {e}")
 
     return 'Other'
 

@@ -9,10 +9,12 @@ from flask_cors import CORS
 from src.models.user import db
 from src.models.transaction import Transaction, Category
 from src.models.communal_expense import CommunalExpenseType, CommunalExpense
+from src.models.category_override import CategoryOverride
 from src.routes.user import user_bp
 from src.routes.finance import finance_bp
 from src.routes.receipts import receipts_bp
 from src.routes.settings import settings_bp
+from src.routes.transactions import transactions_bp
 
 load_dotenv()
 
@@ -26,6 +28,7 @@ app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(finance_bp, url_prefix='/api')
 app.register_blueprint(receipts_bp, url_prefix='/api/receipts')
 app.register_blueprint(settings_bp, url_prefix='/api/settings')
+app.register_blueprint(transactions_bp, url_prefix='/api')
 
 # uncomment if you need to use database
 db_dir = os.path.join(os.path.dirname(__file__), 'database')

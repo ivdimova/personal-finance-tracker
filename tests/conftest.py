@@ -13,6 +13,7 @@ from src.main import app as _app
 from src.models.user import db
 from src.models.transaction import Transaction, Category
 from src.models.communal_expense import CommunalExpenseType, CommunalExpense
+from src.models.category_override import CategoryOverride
 
 
 @pytest.fixture(scope="session")
@@ -62,6 +63,7 @@ def db_session(app):
         db.session.query(Category).delete()
         db.session.query(CommunalExpense).delete()
         db.session.query(CommunalExpenseType).delete()
+        db.session.query(CategoryOverride).delete()
         db.session.commit()
         yield db.session
         db.session.rollback()

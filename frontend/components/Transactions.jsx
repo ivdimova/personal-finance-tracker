@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Filter, TrendingUp, TrendingDown, DollarSign, AlertCircle } from 'lucide-react'
+import { Filter, TrendingUp, TrendingDown, DollarSign, AlertCircle, Pencil } from 'lucide-react'
 import { transactionsApi, categoriesApi } from '../services/api'
 
 const Transactions = () => {
@@ -9,6 +9,7 @@ const Transactions = () => {
   const [summary, setSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [editingCategoryId, setEditingCategoryId] = useState(null)
 
   useEffect(() => {
     loadCategories()
@@ -49,6 +50,22 @@ const Transactions = () => {
 
   const getAmountClass = (amount) => {
     return amount >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'
+  }
+
+  const handleCategoryChange = async (transactionId, newCategory) => {
+    try {
+      await transactionsApi.updateCategory(transactionId, newCategory)
+      setTransactions((prev) =>
+        prev.map((t) =>
+          t.id === transactionId ? { ...t, category: newCategory } : t
+        )
+      )
+      setEditingCategoryId(null)
+      loadTransactions()
+    } catch (err) {
+      console.error('Failed to update category:', err)
+      setError('Failed to update category. Please try again.')
+    }
   }
 
   if (error) {
@@ -204,12 +221,27 @@ const Transactions = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {transaction.category ? (
-                          <span className="inline-flex px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
-                            {transaction.category}
-                          </span>
+                        {editingCategoryId === transaction.id ? (
+                          <select
+                            value={transaction.category || ''}
+                            onChange={(e) => handleCategoryChange(transaction.id, e.target.value)}
+                            onBlur={() => setEditingCategoryId(null)}
+                            autoFocus
+                            className="text-xs px-2 py-1 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                          >
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.name}>{cat.name}</option>
+                            ))}
+                          </select>
                         ) : (
-                          <span className="text-gray-400">Uncategorized</span>
+                          <span
+                            onClick={() => setEditingCategoryId(transaction.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full cursor-pointer hover:bg-purple-200 hover:shadow-sm transition-all group"
+                            title="Click to change category"
+                          >
+                            {transaction.category || 'Uncategorized'}
+                            <Pencil size={11} className="text-purple-400 group-hover:text-purple-600 transition-colors" />
+                          </span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -232,9 +264,26 @@ const Transactions = () => {
                         {new Date(transaction.date).toLocaleDateString()}
                         {transaction.account && ` • ${transaction.account}`}
                       </p>
-                      {transaction.category && (
-                        <span className="inline-flex px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full mt-2">
-                          {transaction.category}
+                      {editingCategoryId === transaction.id ? (
+                        <select
+                          value={transaction.category || ''}
+                          onChange={(e) => handleCategoryChange(transaction.id, e.target.value)}
+                          onBlur={() => setEditingCategoryId(null)}
+                          autoFocus
+                          className="text-xs px-2 py-1 mt-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                          {categories.map((cat) => (
+                            <option key={cat.id} value={cat.name}>{cat.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          onClick={() => setEditingCategoryId(transaction.id)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full mt-2 cursor-pointer hover:bg-purple-200 hover:shadow-sm transition-all group"
+                          title="Click to change category"
+                        >
+                          {transaction.category || 'Uncategorized'}
+                          <Pencil size={11} className="text-purple-400 group-hover:text-purple-600 transition-colors" />
                         </span>
                       )}
                     </div>
