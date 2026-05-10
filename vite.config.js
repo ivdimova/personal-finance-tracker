@@ -7,7 +7,7 @@ export default defineConfig({
   root: 'frontend',
   server: {
     proxy: {
-      '/api': 'http://localhost:5555'
+      '/api': 'http://192.168.18.6:5555'
     }
   },
   build: {
