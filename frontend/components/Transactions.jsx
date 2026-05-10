@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Filter, TrendingUp, TrendingDown, DollarSign, AlertCircle, Pencil } from 'lucide-react'
+import { Filter, TrendingUp, TrendingDown, DollarSign, AlertCircle, Pencil, Trash2 } from 'lucide-react'
 import { transactionsApi, categoriesApi } from '../services/api'
 
 const Transactions = () => {
@@ -50,6 +50,16 @@ const Transactions = () => {
 
   const getAmountClass = (amount) => {
     return amount >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'
+  }
+
+  const handleDelete = async (transactionId) => {
+    if (!window.confirm('Delete this transaction?')) return
+    try {
+      await transactionsApi.delete(transactionId)
+      loadTransactions()
+    } catch (err) {
+      setError('Failed to delete transaction. Please try again.')
+    }
   }
 
   const handleCategoryChange = async (transactionId, newCategory) => {
@@ -202,6 +212,7 @@ const Transactions = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                       Account
                     </th>
+                    <th className="px-6 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -247,6 +258,15 @@ const Transactions = () => {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {transaction.account || 'N/A'}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <button
+                          onClick={() => handleDelete(transaction.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete transaction"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -287,10 +307,17 @@ const Transactions = () => {
                         </span>
                       )}
                     </div>
-                    <div className="ml-4">
+                    <div className="ml-4 flex flex-col items-end gap-2">
                       <span className={getAmountClass(transaction.amount)}>
                         {formatAmount(transaction.amount)}
                       </span>
+                      <button
+                        onClick={() => handleDelete(transaction.id)}
+                        className="text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete transaction"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   </div>
                 </div>

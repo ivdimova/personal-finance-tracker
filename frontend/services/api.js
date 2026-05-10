@@ -43,6 +43,7 @@ export const transactionsApi = {
   },
   updateCategory: (transactionId, category, remember = true) =>
     api.put(`/transactions/${transactionId}/category`, { category, remember }),
+  delete: (transactionId) => api.delete(`/transactions/${transactionId}`),
 }
 
 // Categories API

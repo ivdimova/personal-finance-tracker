@@ -83,6 +83,27 @@ def update_transaction_category(transaction_id: int):
     })
 
 
+@transactions_bp.route("/transactions/<int:transaction_id>", methods=["DELETE"])
+def delete_transaction(transaction_id: int):
+    """Delete a transaction by ID.
+
+    Args:
+        transaction_id: The ID of the transaction to delete.
+
+    Returns:
+        JSON with success status.
+    """
+    transaction = Transaction.query.get(transaction_id)
+    if not transaction:
+        return jsonify({"error": "Transaction not found"}), 404
+
+    db.session.delete(transaction)
+    db.session.commit()
+
+    current_app.logger.info(f"Transaction {transaction_id} deleted")
+    return jsonify({"success": True})
+
+
 @transactions_bp.route(
     "/transactions/bulk-recategorize", methods=["POST"]
 )
