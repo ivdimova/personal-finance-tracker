@@ -122,7 +122,9 @@ class OllamaClient:
         Returns:
             Parsed JSON dict or None if failed
         """
-        response_text = self.generate(prompt, format_json=True)
+        # Reason: format_json=True causes some models (e.g. qwen3) to return empty responses.
+        # The prompt already instructs JSON-only output; we extract JSON from text as fallback.
+        response_text = self.generate(prompt, format_json=False)
 
         if not response_text:
             return None
@@ -165,6 +167,6 @@ def get_ollama_client() -> OllamaClient:
         base_url = os.getenv("AI_ENDPOINT", "http://localhost:11434")
         model = os.getenv("AI_MODEL", "llama3.2:3b")
 
-    timeout = int(os.getenv("AI_TIMEOUT", "30"))
+    timeout = int(os.getenv("AI_TIMEOUT", "180"))
 
     return OllamaClient(base_url=base_url, model=model, timeout=timeout)

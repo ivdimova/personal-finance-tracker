@@ -73,6 +73,7 @@ export const receiptsApi = {
       timeout: 300000, // 5 minutes for OCR processing
     })
   },
+  parseText: (text) => api.post('/receipts/parse-text', { text }),
   list: () => api.get('/receipts/list'),
   getFolder: (month) => api.get(`/receipts/folder/${month}`),
 }

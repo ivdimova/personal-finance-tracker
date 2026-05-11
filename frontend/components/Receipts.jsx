@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react'
-import { Upload, FileText, Download, AlertCircle, X, CheckCircle, Loader } from 'lucide-react'
+import { Upload, FileText, Download, AlertCircle, X, CheckCircle, Loader, Sparkles } from 'lucide-react'
 import { extractTextFromImage, terminateOCR } from '../services/ocr'
 import { extractFromPDF } from '../services/pdf'
 import { parseReceiptText } from '../services/receiptParser'
+import { receiptsApi } from '../services/api'
 
 const ACCEPTED = '.jpg,.jpeg,.png,.webp,.pdf'
 const DEFAULT_CURRENCY = 'EUR'
@@ -27,7 +28,7 @@ const downloadFile = (file, filename) => {
 }
 
 const Receipts = () => {
-  // Each entry: { file, status: 'pending'|'processing'|'done'|'error', form, error }
+  // Each entry: { file, status: 'pending'|'processing'|'analyzing'|'done'|'error', form, error }
   const [items, setItems] = useState([])
   const [dragActive, setDragActive] = useState(false)
   const [ocrProgress, setOcrProgress] = useState(0)
@@ -59,6 +60,22 @@ const Receipts = () => {
       }
 
       const parsed = parseReceiptText(text, DEFAULT_CURRENCY)
+
+      // AI analysis phase
+      updateItem(idx, { status: 'analyzing' })
+      try {
+        const aiResponse = await receiptsApi.parseText(text)
+        if (aiResponse.data?.success) {
+          const ai = aiResponse.data
+          parsed.merchant = ai.merchant || parsed.merchant
+          parsed.date = ai.date || parsed.date
+          parsed.amount = ai.amount != null ? String(ai.amount) : parsed.amount
+          parsed.currency = ai.currency || parsed.currency
+        }
+      } catch {
+        // AI failed silently — regex results are good enough
+      }
+
       updateItem(idx, { status: 'done', form: parsed, error: '' })
     } catch (err) {
       updateItem(idx, { status: 'error', error: err.message ?? 'Processing failed' })
@@ -111,7 +128,7 @@ const Receipts = () => {
 
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx))
 
-  const isProcessing = items.some(it => it.status === 'processing' || it.status === 'pending')
+  const isProcessing = items.some(it => ['pending', 'processing', 'analyzing'].includes(it.status))
   const doneCount = items.filter(it => it.status === 'done').length
 
   return (
@@ -159,6 +176,9 @@ const Receipts = () => {
                   {item.status === 'processing' && (
                     <Loader size={16} className="text-purple-500 animate-spin shrink-0" />
                   )}
+                  {item.status === 'analyzing' && (
+                    <Sparkles size={16} className="text-indigo-500 animate-pulse shrink-0" />
+                  )}
                   {item.status === 'done' && (
                     <CheckCircle size={16} className="text-green-500 shrink-0" />
                   )}
@@ -183,6 +203,11 @@ const Receipts = () => {
                     style={{ width: `${ocrProgress}%` }}
                   />
                 </div>
+              )}
+              {item.status === 'analyzing' && (
+                <p className="text-xs text-indigo-500 flex items-center gap-1">
+                  <Sparkles size={12} /> AI analyzing...
+                </p>
               )}
 
               {/* Error */}

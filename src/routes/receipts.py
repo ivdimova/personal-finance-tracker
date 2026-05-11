@@ -1023,6 +1023,32 @@ def upload_receipts():
         current_app.logger.error(f"Upload error: {str(e)}")
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
+@receipts_bp.route('/parse-text', methods=['POST'])
+def parse_receipt_text():
+    """Use AI to extract structured data from receipt OCR text."""
+    data = request.get_json()
+    text = data.get('text', '') if data else ''
+    if not text or len(text.strip()) < 10:
+        return jsonify({'success': False, 'message': 'Text too short'}), 400
+
+    try:
+        from src.ai.receipt_parser import extract_receipt_data
+        from src.models.user import UserSettings
+        import os
+
+        ai_enabled_setting = UserSettings.get('ai_enabled', os.getenv('AI_ENABLED', 'true'))
+        if str(ai_enabled_setting).lower() != 'true':
+            return jsonify({'success': False, 'message': 'AI is disabled'})
+
+        result = extract_receipt_data(text)
+        if result:
+            return jsonify({'success': True, **result})
+        return jsonify({'success': False, 'message': 'AI could not parse receipt'})
+    except Exception as e:
+        current_app.logger.error(f"AI receipt parse error: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+
+
 @receipts_bp.route('/list', methods=['GET'])
 def list_receipts():
     """List all receipts organized by month folders"""
