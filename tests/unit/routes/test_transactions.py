@@ -136,3 +136,37 @@ class TestBulkRecategorize:
             json={"description": "Test"},
         )
         assert response.status_code == 400
+
+
+class TestDeleteTransaction:
+    """Test the DELETE /api/transactions/<id> endpoint."""
+
+    @pytest.mark.unit
+    def test_delete_transaction_success(
+        self, client, db_session, sample_transactions
+    ):
+        """Test successfully deleting a transaction."""
+        txn = sample_transactions[0]
+        txn_id = txn.id
+        response = client.delete(f"/api/transactions/{txn_id}")
+        assert response.status_code == 200
+        assert response.get_json()["success"] is True
+        assert Transaction.query.get(txn_id) is None
+
+    @pytest.mark.unit
+    def test_delete_transaction_not_found(self, client):
+        """Test deleting a non-existent transaction returns 404."""
+        response = client.delete("/api/transactions/99999")
+        assert response.status_code == 404
+        assert "error" in response.get_json()
+
+    @pytest.mark.unit
+    def test_delete_transaction_removes_only_target(
+        self, client, db_session, sample_transactions
+    ):
+        """Test that deleting one transaction does not affect others."""
+        txn_to_delete = sample_transactions[0]
+        remaining = sample_transactions[1:]
+        client.delete(f"/api/transactions/{txn_to_delete.id}")
+        for txn in remaining:
+            assert Transaction.query.get(txn.id) is not None
