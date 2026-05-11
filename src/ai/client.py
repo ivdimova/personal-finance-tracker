@@ -151,16 +151,20 @@ class OllamaClient:
 def get_ollama_client() -> OllamaClient:
     """
     Get configured Ollama client instance.
+    UserSettings override .env values when set.
 
     Returns:
-        OllamaClient instance with settings from environment
+        OllamaClient instance with settings from UserSettings or environment
     """
-    base_url = os.getenv("AI_ENDPOINT", "http://localhost:11434")
-    model = os.getenv("AI_MODEL", "llama3.2:3b")
+    # Reason: import here to avoid circular imports at module load time
+    try:
+        from src.models.user import UserSettings
+        base_url = UserSettings.get('ai_endpoint') or os.getenv("AI_ENDPOINT", "http://localhost:11434")
+        model = UserSettings.get('ai_model') or os.getenv("AI_MODEL", "llama3.2:3b")
+    except Exception:
+        base_url = os.getenv("AI_ENDPOINT", "http://localhost:11434")
+        model = os.getenv("AI_MODEL", "llama3.2:3b")
+
     timeout = int(os.getenv("AI_TIMEOUT", "30"))
 
-    return OllamaClient(
-        base_url=base_url,
-        model=model,
-        timeout=timeout
-    )
+    return OllamaClient(base_url=base_url, model=model, timeout=timeout)

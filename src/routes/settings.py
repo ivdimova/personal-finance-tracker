@@ -322,40 +322,52 @@ def reset_communal_expenses():
 
 @settings_bp.route('/user', methods=['GET'])
 def get_user_settings():
-    """Get user settings including user's name for transfer exclusion."""
+    """Get user settings."""
+    import os
     try:
-        user_name = UserSettings.get('user_name', '')
-
         return jsonify({
             'success': True,
-            'user_name': user_name
+            'user_name': UserSettings.get('user_name', ''),
+            'ai_enabled': UserSettings.get('ai_enabled', os.getenv('AI_ENABLED', 'true')),
+            'ai_endpoint': UserSettings.get('ai_endpoint', os.getenv('AI_ENDPOINT', 'http://localhost:11434')),
+            'ai_model': UserSettings.get('ai_model', os.getenv('AI_MODEL', 'llama3.2:3b')),
         })
-
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'Error fetching user settings: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'message': f'Error fetching user settings: {str(e)}'}), 500
 
 
 @settings_bp.route('/user', methods=['PUT'])
 def update_user_settings():
-    """Update user settings including user's name."""
+    """Update user settings."""
     try:
         data = request.get_json()
-        user_name = data.get('user_name', '').strip()
 
-        UserSettings.set('user_name', user_name)
+        if 'user_name' in data:
+            UserSettings.set('user_name', data['user_name'].strip())
+        if 'ai_enabled' in data:
+            UserSettings.set('ai_enabled', str(data['ai_enabled']).lower())
+        if 'ai_endpoint' in data:
+            UserSettings.set('ai_endpoint', data['ai_endpoint'].strip())
+        if 'ai_model' in data:
+            UserSettings.set('ai_model', data['ai_model'].strip())
 
-        return jsonify({
-            'success': True,
-            'message': 'User settings updated successfully',
-            'user_name': user_name
-        })
+        return jsonify({'success': True, 'message': 'Settings updated successfully'})
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': f'Error updating user settings: {str(e)}'
-        }), 500
+        return jsonify({'success': False, 'message': f'Error updating settings: {str(e)}'}), 500
+
+
+@settings_bp.route('/ai/test', methods=['GET'])
+def test_ai_connection():
+    """Test connection to the configured AI endpoint."""
+    try:
+        from src.ai.client import get_ollama_client
+        client = get_ollama_client()
+        available = client.is_available()
+        if available:
+            return jsonify({'success': True, 'message': f'Connected to {client.base_url}'})
+        else:
+            return jsonify({'success': False, 'message': f'Cannot reach {client.base_url}'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 200

@@ -97,6 +97,7 @@ export const settingsApi = {
   // User Settings
   getUserSettings: () => api.get('/settings/user'),
   updateUserSettings: (data) => api.put('/settings/user', data),
+  testAiConnection: () => api.get('/settings/ai/test'),
 }
 
 // Reset API

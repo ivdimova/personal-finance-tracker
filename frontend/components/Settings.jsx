@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Edit, Trash2, Save, X, AlertTriangle, Settings as SettingsIcon } from 'lucide-react'
+import { Plus, Edit, Trash2, Save, X, AlertTriangle, Settings as SettingsIcon, Wifi, CheckCircle, XCircle } from 'lucide-react'
 import { settingsApi, resetApi } from '../services/api'
 
 const Settings = () => {
@@ -12,6 +12,12 @@ const Settings = () => {
   const [resetting, setResetting] = useState(false)
   const [userName, setUserName] = useState('')
   const [savingUserName, setSavingUserName] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(true)
+  const [aiEndpoint, setAiEndpoint] = useState('http://localhost:11434')
+  const [aiModel, setAiModel] = useState('llama3.2:3b')
+  const [savingAi, setSavingAi] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState(null) // null | 'testing' | 'ok' | 'error'
+  const [connectionMessage, setConnectionMessage] = useState('')
 
   useEffect(() => {
     loadCommunalExpenseTypes()
@@ -35,9 +41,41 @@ const Settings = () => {
       const response = await settingsApi.getUserSettings()
       if (response.data.success) {
         setUserName(response.data.user_name || '')
+        setAiEnabled(response.data.ai_enabled === 'true' || response.data.ai_enabled === true)
+        setAiEndpoint(response.data.ai_endpoint || 'http://localhost:11434')
+        setAiModel(response.data.ai_model || 'llama3.2:3b')
       }
     } catch (err) {
       console.error('Failed to load user settings:', err)
+    }
+  }
+
+  const handleSaveAiSettings = async () => {
+    try {
+      setSavingAi(true)
+      await settingsApi.updateUserSettings({ ai_enabled: aiEnabled, ai_endpoint: aiEndpoint, ai_model: aiModel })
+    } catch (err) {
+      setError(`Failed to save AI settings: ${err.response?.data?.message || err.message}`)
+    } finally {
+      setSavingAi(false)
+    }
+  }
+
+  const handleTestConnection = async () => {
+    setConnectionStatus('testing')
+    setConnectionMessage('')
+    try {
+      const response = await settingsApi.testAiConnection()
+      if (response.data.success) {
+        setConnectionStatus('ok')
+        setConnectionMessage(response.data.message)
+      } else {
+        setConnectionStatus('error')
+        setConnectionMessage(response.data.message)
+      }
+    } catch (err) {
+      setConnectionStatus('error')
+      setConnectionMessage(err.response?.data?.message || err.message)
     }
   }
 
@@ -226,6 +264,87 @@ const Settings = () => {
                 {savingUserName ? 'Saving...' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Configuration Section */}
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        <div className="p-6 border-b border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900">AI Configuration</h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Configure the Ollama endpoint used for automatic transaction categorisation and receipt parsing.
+          </p>
+        </div>
+
+        <div className="divide-y divide-gray-100">
+          {/* Enable toggle */}
+          <div className="px-6 py-4">
+            <label className="inline-flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aiEnabled}
+                onChange={(e) => setAiEnabled(e.target.checked)}
+                className="w-4 h-4 accent-purple-600"
+              />
+              <span className="text-sm font-medium text-gray-700">Enable AI features</span>
+            </label>
+          </div>
+
+          {/* Endpoint + Model */}
+          <div className="px-6 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ollama Endpoint</label>
+              <input
+                type="text"
+                value={aiEndpoint}
+                onChange={(e) => setAiEndpoint(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="http://localhost:11434"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Model</label>
+              <input
+                type="text"
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                placeholder="llama3.2:3b"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="px-6 py-4 flex items-center gap-4 flex-wrap">
+            <button
+              onClick={handleTestConnection}
+              disabled={connectionStatus === 'testing'}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Wifi size={16} />
+              {connectionStatus === 'testing' ? 'Testing…' : 'Test Connection'}
+            </button>
+
+            {connectionStatus === 'ok' && (
+              <span className="flex items-center gap-1 text-green-600 text-sm">
+                <CheckCircle size={16} /> {connectionMessage}
+              </span>
+            )}
+            {connectionStatus === 'error' && (
+              <span className="flex items-center gap-1 text-red-600 text-sm">
+                <XCircle size={16} /> {connectionMessage}
+              </span>
+            )}
+
+            <button
+              onClick={handleSaveAiSettings}
+              disabled={savingAi}
+              className="flex items-center ml-auto px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+            >
+              <Save size={16} className="mr-1" />
+              {savingAi ? 'Saving…' : 'Save'}
+            </button>
           </div>
         </div>
       </div>
