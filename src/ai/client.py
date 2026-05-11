@@ -1,24 +1,24 @@
-"""Ollama API client wrapper with error handling and retry logic."""
+"""Ollama API client wrapper with streaming and think:false for fast Qwen3 responses."""
 
 import os
 import json
 import logging
+import re
 import requests
 from typing import Dict, Optional, Any
-from time import sleep
 
 logger = logging.getLogger(__name__)
 
 
 class OllamaClient:
-    """Client for communicating with Ollama API."""
+    """Client for communicating with Ollama API via the native /api/chat endpoint."""
 
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
-        model: str = "llama3.2:3b",
+        model: str = "qwen3.5:9b",
         timeout: int = 30,
-        max_retries: int = 2
+        max_retries: int = 1
     ):
         """
         Initialize Ollama client.
@@ -26,14 +26,14 @@ class OllamaClient:
         Args:
             base_url: Ollama API endpoint
             model: Model name to use
-            timeout: Request timeout in seconds
+            timeout: Per-chunk read timeout in seconds (not total response time)
             max_retries: Maximum number of retry attempts
         """
         self.base_url = base_url.rstrip('/')
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
-        self.generate_url = f"{self.base_url}/api/generate"
+        self.chat_url = f"{self.base_url}/api/chat"
 
     def is_available(self) -> bool:
         """Check if Ollama service is available."""
@@ -51,7 +51,10 @@ class OllamaClient:
         format_json: bool = True
     ) -> Optional[str]:
         """
-        Generate text completion from Ollama.
+        Generate a response via the Ollama /api/chat endpoint with streaming.
+
+        Uses think:false to disable Qwen3 chain-of-thought reasoning, which reduces
+        response time from minutes to seconds.
 
         Args:
             prompt: The prompt to send
@@ -63,11 +66,10 @@ class OllamaClient:
         """
         payload = {
             "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": temperature,
-            }
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+            "think": False,  # Reason: disables Qwen3 reasoning mode — without this, responses take minutes
+            "options": {"temperature": temperature},
         }
 
         if format_json:
@@ -75,35 +77,48 @@ class OllamaClient:
 
         for attempt in range(self.max_retries + 1):
             try:
-                logger.debug(f"Ollama API call (attempt {attempt + 1}/{self.max_retries + 1})")
+                logger.debug(f"Ollama chat call (attempt {attempt + 1}), model={self.model}")
 
+                # Reason: timeout=(connect, read) — read timeout acts as per-chunk activity timeout
                 response = requests.post(
-                    self.generate_url,
+                    self.chat_url,
                     json=payload,
-                    timeout=self.timeout
+                    stream=True,
+                    timeout=(5, self.timeout)
                 )
-
                 response.raise_for_status()
-                result = response.json()
 
-                generated_text = result.get("response", "").strip()
+                content = ""
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                        delta = chunk.get("message", {}).get("content", "")
+                        if delta:
+                            content += delta
+                        if chunk.get("done"):
+                            break
+                    except json.JSONDecodeError:
+                        continue
 
-                if generated_text:
-                    logger.debug(f"Generated response: {generated_text[:100]}...")
-                    return generated_text
+                # Strip <think>...</think> blocks that some models emit even with think:false
+                content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+
+                if content:
+                    logger.debug(f"Generated response: {content[:100]}...")
+                    return content
                 else:
                     logger.warning("Empty response from Ollama")
 
             except requests.exceptions.Timeout:
-                logger.warning(f"Ollama request timeout (attempt {attempt + 1})")
+                logger.warning(f"Ollama chunk timeout after {self.timeout}s (attempt {attempt + 1})")
                 if attempt < self.max_retries:
-                    sleep(1 * (attempt + 1))  # Exponential backoff
                     continue
 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Ollama request failed: {e}")
                 if attempt < self.max_retries:
-                    sleep(1 * (attempt + 1))
                     continue
 
             except Exception as e:
@@ -114,7 +129,7 @@ class OllamaClient:
 
     def generate_json(self, prompt: str) -> Optional[Dict[str, Any]]:
         """
-        Generate JSON response from Ollama.
+        Generate a JSON response from Ollama.
 
         Args:
             prompt: The prompt to send
@@ -122,31 +137,26 @@ class OllamaClient:
         Returns:
             Parsed JSON dict or None if failed
         """
-        # Reason: format_json=True causes some models (e.g. qwen3) to return empty responses.
-        # The prompt already instructs JSON-only output; we extract JSON from text as fallback.
-        response_text = self.generate(prompt, format_json=False)
+        response_text = self.generate(prompt, format_json=True)
 
         if not response_text:
             return None
 
         try:
-            # Try to parse as JSON
             return json.loads(response_text)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON response: {e}")
-            logger.debug(f"Raw response: {response_text}")
+        except json.JSONDecodeError:
+            logger.debug(f"Direct JSON parse failed, trying extraction. Raw: {response_text[:200]}")
 
-            # Try to extract JSON from text (sometimes model adds extra text)
+            # Extract JSON object from text if model added surrounding prose
             try:
-                # Find JSON object in the response
                 start_idx = response_text.find('{')
                 end_idx = response_text.rfind('}')
                 if start_idx != -1 and end_idx != -1:
-                    json_str = response_text[start_idx:end_idx + 1]
-                    return json.loads(json_str)
+                    return json.loads(response_text[start_idx:end_idx + 1])
             except Exception:
                 pass
 
+            logger.error(f"Failed to extract JSON from response: {response_text[:200]}")
             return None
 
 
@@ -162,11 +172,12 @@ def get_ollama_client() -> OllamaClient:
     try:
         from src.models.user import UserSettings
         base_url = UserSettings.get('ai_endpoint') or os.getenv("AI_ENDPOINT", "http://localhost:11434")
-        model = UserSettings.get('ai_model') or os.getenv("AI_MODEL", "llama3.2:3b")
+        model = UserSettings.get('ai_model') or os.getenv("AI_MODEL", "qwen3.5:9b")
     except Exception:
         base_url = os.getenv("AI_ENDPOINT", "http://localhost:11434")
-        model = os.getenv("AI_MODEL", "llama3.2:3b")
+        model = os.getenv("AI_MODEL", "qwen3.5:9b")
 
-    timeout = int(os.getenv("AI_TIMEOUT", "180"))
+    # Per-chunk timeout — 30s with no new tokens = hung request
+    timeout = int(os.getenv("AI_TIMEOUT", "30"))
 
     return OllamaClient(base_url=base_url, model=model, timeout=timeout)
