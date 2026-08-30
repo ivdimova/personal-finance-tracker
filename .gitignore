@@ -1,6 +1,7 @@
 # Python
 venv/
 venv_linux/
+ven/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -96,6 +97,7 @@ Thumbs.db
 claude-code-*
 context-engineering-intro/
 PRPs/
+.playwright-mcp/
 
 # Database files
 *.db
